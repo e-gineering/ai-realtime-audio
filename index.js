@@ -47,6 +47,7 @@ fastify.register(import('@fastify/formbody'));
 
 const OPENAI_WS_URL = `wss://api.openai.com/v1/realtime?model=${OPENAI_MODEL}`;
 const SESSION_UPDATE_DELAY_MS = 250;
+const GREETING_DELAY_OFFSET_MS = 100; // Additional delay after session update to ensure session is ready
 
 // MCP client management
 const mcpClients = new Map();
@@ -361,7 +362,7 @@ fastify.register(async (fastify) => {
 
         // Trigger AI response
         openAiWs.send(JSON.stringify({ type: 'response.create' }));
-      }, SESSION_UPDATE_DELAY_MS + 100);
+      }, SESSION_UPDATE_DELAY_MS + GREETING_DELAY_OFFSET_MS);
     };
 
     // Handle OpenAI WebSocket open
