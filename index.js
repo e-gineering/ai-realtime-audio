@@ -46,8 +46,19 @@ fastify.register(FastifyWS);
 fastify.register(import('@fastify/formbody'));
 
 const OPENAI_WS_URL = `wss://api.openai.com/v1/realtime?model=${OPENAI_MODEL}`;
-const SESSION_UPDATE_DELAY_MS = 250;
 
+// Timing constants for session and message handling.
+// These values are defaults chosen based on observed network and system latency in typical deployments.
+// Adjust via environment variables to tune for your environment.
+
+// Delay after session update before sending greeting (ms)
+const SESSION_UPDATE_DELAY_MS = Number(process.env.SESSION_UPDATE_DELAY_MS) || 250;
+// Additional delay after session update to ensure session is ready (ms)
+const GREETING_DELAY_OFFSET_MS = Number(process.env.GREETING_DELAY_OFFSET_MS) || 100;
+// Delay between WebSocket messages to ensure proper ordering (ms)
+const MESSAGE_SEQUENCE_DELAY_MS = Number(process.env.MESSAGE_SEQUENCE_DELAY_MS) || 50;
+// Combined delay to ensure session is configured before greeting (ms)
+const TOTAL_GREETING_DELAY_MS = SESSION_UPDATE_DELAY_MS + GREETING_DELAY_OFFSET_MS;
 // MCP client management
 const mcpClients = new Map();
 
@@ -341,6 +352,29 @@ fastify.register(async (fastify) => {
 
       console.log('Sending session update:', JSON.stringify(sessionUpdate));
       openAiWs.send(JSON.stringify(sessionUpdate));
+
+      // Send initial greeting to make AI speak first
+      setTimeout(() => {
+        const initialMessage = {
+          type: 'conversation.item.create',
+          item: {
+            type: 'message',
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text: 'Please greet the caller and invite them to begin a scaffolding inspection.'
+              }
+            ]
+          }
+        };
+        openAiWs.send(JSON.stringify(initialMessage));
+
+        // Trigger AI response after a small delay to ensure proper message sequencing
+        setTimeout(() => {
+          openAiWs.send(JSON.stringify({ type: 'response.create' }));
+        }, MESSAGE_SEQUENCE_DELAY_MS);
+      }, TOTAL_GREETING_DELAY_MS);
     };
 
     // Handle OpenAI WebSocket open
@@ -399,9 +433,11 @@ fastify.register(async (fastify) => {
             // Handle end_call function
             if (name === 'end_call' && result.success) {
               console.log(`📞 Call ending requested: ${parsedArgs.reason}`);
-              
+
               // Send a final message asking AI to say goodbye
-              openAiWs.send(JSON.stringify({ type: 'response.create' }));
+              setTimeout(() => {
+                openAiWs.send(JSON.stringify({ type: 'response.create' }));
+              }, MESSAGE_SEQUENCE_DELAY_MS);
               
               // Wait for AI response to complete, then hang up
               setTimeout(() => {
@@ -417,7 +453,9 @@ fastify.register(async (fastify) => {
               }, 3000);
             } else {
               // Request a new response for non-hangup functions
-              openAiWs.send(JSON.stringify({ type: 'response.create' }));
+              setTimeout(() => {
+                openAiWs.send(JSON.stringify({ type: 'response.create' }));
+              }, MESSAGE_SEQUENCE_DELAY_MS);
             }
           } catch (error) {
             console.error('Error calling MCP tool:', error);
@@ -464,7 +502,9 @@ fastify.register(async (fastify) => {
             if (openAiWs.readyState === WebSocket.OPEN) {
               if (isAIResponding) {
                 openAiWs.send(JSON.stringify({ type: 'response.cancel' }));
-                openAiWs.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
+                setTimeout(() => {
+                  openAiWs.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
+                }, MESSAGE_SEQUENCE_DELAY_MS);
                 isAIResponding = false;
               }
               
