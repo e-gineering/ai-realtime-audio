@@ -11,7 +11,8 @@ const {
   OPENAI_API_KEY,
   PORT = 5050,
   SYSTEM_MESSAGE = 'You are a helpful AI assistant.',
-  VOICE = 'alloy'
+  VOICE = 'alloy',
+  OPENAI_MODEL = 'gpt-4o-realtime-preview-2024-10-01'
 } = process.env;
 
 if (!OPENAI_API_KEY) {
@@ -23,7 +24,7 @@ const fastify = Fastify();
 fastify.register(FastifyWS);
 fastify.register(import('@fastify/formbody'));
 
-const OPENAI_WS_URL = 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01';
+const OPENAI_WS_URL = `wss://api.openai.com/v1/realtime?model=${OPENAI_MODEL}`;
 
 // MCP client management
 const mcpClients = new Map();
