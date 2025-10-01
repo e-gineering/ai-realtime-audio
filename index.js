@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import FastifyWS from '@fastify/websocket';
 import WebSocket from 'ws';
 import dotenv from 'dotenv';
+import { readFileSync } from 'fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
@@ -10,10 +11,17 @@ dotenv.config();
 const {
   OPENAI_API_KEY,
   PORT = 5050,
-  SYSTEM_MESSAGE = 'You are a helpful AI assistant.',
+  SYSTEM_MESSAGE_FILE = './system-prompt.txt',
   VOICE = 'alloy',
   OPENAI_MODEL = 'gpt-4o-realtime-preview-2024-10-01'
 } = process.env;
+
+let SYSTEM_MESSAGE = 'You are a helpful AI assistant.';
+try {
+  SYSTEM_MESSAGE = readFileSync(SYSTEM_MESSAGE_FILE, 'utf-8').trim();
+} catch (error) {
+  console.warn(`Could not read system prompt from ${SYSTEM_MESSAGE_FILE}, using default`);
+}
 
 if (!OPENAI_API_KEY) {
   console.error('Missing OPENAI_API_KEY in environment variables');
