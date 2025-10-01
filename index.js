@@ -5,6 +5,19 @@ import dotenv from 'dotenv';
 import { readFileSync } from 'fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import {
+  initializeDatabase,
+  createInspection,
+  getInspectionByStreamSid,
+  getInspectionByTag,
+  saveInspectionData,
+  completeInspection,
+  getAllInspections,
+  getInspectionsByResult,
+  getInspectionsByLocation,
+  getInspectionStats,
+  closeDatabase
+} from './database.js';
 
 dotenv.config();
 
@@ -217,16 +230,36 @@ async function callMCPTool(toolName, args, context = {}) {
       };
     }
     
-    console.log('📋 Inspection Data Submitted:', JSON.stringify(args, null, 2));
+    const existingInspection = getInspectionByTag(args.tag_identifier);
+    if (existingInspection && existingInspection.stream_sid !== context.streamSid) {
+      return {
+        success: false,
+        error: 'Duplicate tag',
+        message: `Tag ${args.tag_identifier} has already been used for another inspection. Please provide a unique tag number.`
+      };
+    }
     
-    context.inspectionSubmitted = true;
-    context.inspectionData = args;
-    
-    return {
-      success: true,
-      message: 'Inspection data successfully recorded',
-      data: args
-    };
+    try {
+      saveInspectionData(context.streamSid, args);
+      console.log('📋 Inspection Data Submitted:', JSON.stringify(args, null, 2));
+      console.log('💾 Saved to database for stream:', context.streamSid);
+      
+      context.inspectionSubmitted = true;
+      context.inspectionData = args;
+      
+      return {
+        success: true,
+        message: 'Inspection data successfully recorded',
+        data: args
+      };
+    } catch (error) {
+      console.error('❌ Database save error:', error);
+      return {
+        success: false,
+        error: 'Database error',
+        message: 'Failed to save inspection data. Please try again.'
+      };
+    }
   }
   
   if (toolName === 'end_call') {
@@ -341,7 +374,8 @@ fastify.register(async (fastify) => {
 
             const context = {
               inspectionSubmitted,
-              inspectionData
+              inspectionData,
+              streamSid
             };
             
             const result = await callMCPTool(name, parsedArgs, context);
@@ -444,6 +478,9 @@ fastify.register(async (fastify) => {
           case 'start':
             streamSid = data.start.streamSid;
             console.log('Incoming stream started:', streamSid);
+            
+            createInspection(streamSid);
+            console.log('📋 New inspection record created for stream:', streamSid);
             break;
           default:
             console.log('Received non-media event:', data.event);
@@ -459,6 +496,12 @@ fastify.register(async (fastify) => {
       if (openAiWs.readyState === WebSocket.OPEN) {
         openAiWs.close();
       }
+      
+      if (streamSid) {
+        completeInspection(streamSid);
+        console.log('✅ Inspection call completed:', streamSid);
+      }
+      
       console.log('Client disconnected');
     });
 
@@ -489,23 +532,76 @@ fastify.post('/incoming-call', async (request, reply) => {
 // Health check endpoint
 fastify.get('/', async (request, reply) => {
   const mcpStatus = Array.from(mcpClients.keys());
+  const stats = getInspectionStats();
   return {
     status: 'ok',
-    message: 'AI Realtime Audio Server',
-    mcpServers: mcpStatus.length > 0 ? mcpStatus : 'none configured'
+    message: 'AI Realtime Audio Server - Scaffolding Inspection',
+    mcpServers: mcpStatus.length > 0 ? mcpStatus : 'none configured',
+    database: stats
   };
+});
+
+// API endpoint to get all inspections
+fastify.get('/inspections', async (request, reply) => {
+  const limit = parseInt(request.query.limit) || 100;
+  const inspections = getAllInspections(limit);
+  return { inspections, count: inspections.length };
+});
+
+// API endpoint to get inspection by tag
+fastify.get('/inspections/tag/:tagId', async (request, reply) => {
+  const inspection = getInspectionByTag(request.params.tagId);
+  if (!inspection) {
+    reply.code(404).send({ error: 'Inspection not found' });
+    return;
+  }
+  return { inspection };
+});
+
+// API endpoint to get inspections by result
+fastify.get('/inspections/result/:result', async (request, reply) => {
+  const result = request.params.result.toUpperCase();
+  if (result !== 'PASS' && result !== 'FAIL') {
+    reply.code(400).send({ error: 'Result must be PASS or FAIL' });
+    return;
+  }
+  const limit = parseInt(request.query.limit) || 100;
+  const inspections = getInspectionsByResult(result, limit);
+  return { inspections, count: inspections.length, result };
+});
+
+// API endpoint to search inspections by location
+fastify.get('/inspections/location/:location', async (request, reply) => {
+  const limit = parseInt(request.query.limit) || 100;
+  const inspections = getInspectionsByLocation(request.params.location, limit);
+  return { inspections, count: inspections.length };
+});
+
+// API endpoint to get statistics
+fastify.get('/inspections/stats', async (request, reply) => {
+  const stats = getInspectionStats();
+  return { stats };
 });
 
 // Start the server
 async function start() {
   try {
-    // Initialize MCP servers first
+    // Initialize database first
+    initializeDatabase();
+    
+    // Initialize MCP servers
     await initializeMCP();
 
     await fastify.listen({ port: PORT, host: '0.0.0.0' });
     console.log(`\n🚀 Server is listening on port ${PORT}`);
     console.log(`📞 Twilio webhook URL: http://your-domain/incoming-call`);
     console.log(`🔌 WebSocket endpoint: ws://your-domain/media-stream`);
+    console.log(`📊 API endpoints:`);
+    console.log(`   GET  /inspections - List all inspections`);
+    console.log(`   GET  /inspections/tag/:tagId - Get inspection by tag`);
+    console.log(`   GET  /inspections/result/:result - Filter by PASS/FAIL`);
+    console.log(`   GET  /inspections/location/:location - Search by location`);
+    console.log(`   GET  /inspections/stats - Get statistics`);
 
     if (mcpClients.size > 0) {
       console.log(`🔧 MCP servers active: ${Array.from(mcpClients.keys()).join(', ')}`);
@@ -517,5 +613,18 @@ async function start() {
     process.exit(1);
   }
 }
+
+// Cleanup on exit
+process.on('SIGINT', () => {
+  console.log('\n🛑 Shutting down...');
+  closeDatabase();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n🛑 Shutting down...');
+  closeDatabase();
+  process.exit(0);
+});
 
 start();

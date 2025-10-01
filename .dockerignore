@@ -1,0 +1,64 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+.npm
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database (local development)
+*.db
+*.db-shm
+*.db-wal
+conversations.db
+
+# Documentation
+README.md
+*.md
+docs/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Logs
+logs/
+*.log
+
+# Testing
+test/
+tests/
+*.test.js
+*.spec.js
+coverage/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Other
+.claude/
+mcp-config.example.json
+ngrok.exe
+ngrok.zip
