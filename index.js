@@ -42,10 +42,39 @@ async function initializeMCP() {
     }
 
     try {
-      const [cmd, ...args] = command.split(' ');
+      // Parse command string respecting quoted arguments
+      const args = [];
+      let current = '';
+      let inQuote = false;
+      let quoteChar = '';
+
+      for (let i = 0; i < command.length; i++) {
+        const char = command[i];
+
+        if ((char === '"' || char === "'") && !inQuote) {
+          inQuote = true;
+          quoteChar = char;
+        } else if (char === quoteChar && inQuote) {
+          inQuote = false;
+          quoteChar = '';
+        } else if (char === ' ' && !inQuote) {
+          if (current) {
+            args.push(current);
+            current = '';
+          }
+        } else {
+          current += char;
+        }
+      }
+
+      if (current) {
+        args.push(current);
+      }
+
+      const [cmd, ...cmdArgs] = args;
       const transport = new StdioClientTransport({
         command: cmd,
-        args: args
+        args: cmdArgs
       });
 
       const client = new Client({
