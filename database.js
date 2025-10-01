@@ -15,6 +15,7 @@ export function initializeDatabase() {
       
       -- Call metadata
       stream_sid TEXT UNIQUE,
+      phone_number TEXT,
       call_started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       call_ended_at DATETIME,
       call_duration_seconds INTEGER,
@@ -31,25 +32,36 @@ export function initializeDatabase() {
       status TEXT DEFAULT 'in_progress' CHECK(status IN ('in_progress', 'completed', 'failed'))
     );
     
+    CREATE TABLE IF NOT EXISTS callers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone_number TEXT UNIQUE NOT NULL,
+      caller_name TEXT,
+      first_call_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_call_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      total_calls INTEGER DEFAULT 1
+    );
+    
     CREATE INDEX IF NOT EXISTS idx_stream_sid ON inspections(stream_sid);
+    CREATE INDEX IF NOT EXISTS idx_phone_number ON inspections(phone_number);
     CREATE INDEX IF NOT EXISTS idx_equipment_id ON inspections(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_inspector_name ON inspections(inspector_name);
     CREATE INDEX IF NOT EXISTS idx_location ON inspections(location);
     CREATE INDEX IF NOT EXISTS idx_result ON inspections(inspection_result);
     CREATE INDEX IF NOT EXISTS idx_submitted_at ON inspections(submitted_at);
     CREATE INDEX IF NOT EXISTS idx_call_date ON inspections(call_started_at);
+    CREATE INDEX IF NOT EXISTS idx_caller_phone ON callers(phone_number);
   `);
   
   console.log('✅ Database initialized:', DB_PATH);
   return db;
 }
 
-export function createInspection(streamSid) {
+export function createInspection(streamSid, phoneNumber = null) {
   const stmt = db.prepare(`
-    INSERT OR IGNORE INTO inspections (stream_sid)
-    VALUES (?)
+    INSERT OR IGNORE INTO inspections (stream_sid, phone_number)
+    VALUES (?, ?)
   `);
-  stmt.run(streamSid);
+  stmt.run(streamSid, phoneNumber);
   
   return getInspectionByStreamSid(streamSid);
 }
@@ -154,6 +166,43 @@ export function getDatabase() {
   return db;
 }
 
+export function getCallerByPhoneNumber(phoneNumber) {
+  if (!phoneNumber) return null;
+  const stmt = db.prepare('SELECT * FROM callers WHERE phone_number = ?');
+  return stmt.get(phoneNumber);
+}
+
+export function saveCallerName(phoneNumber, callerName) {
+  if (!phoneNumber || !callerName) return null;
+  
+  const stmt = db.prepare(`
+    INSERT INTO callers (phone_number, caller_name, first_call_at, last_call_at, total_calls)
+    VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+    ON CONFLICT(phone_number) 
+    DO UPDATE SET 
+      caller_name = excluded.caller_name,
+      last_call_at = CURRENT_TIMESTAMP,
+      total_calls = total_calls + 1
+  `);
+  
+  return stmt.run(phoneNumber, callerName);
+}
+
+export function updateCallerLastCall(phoneNumber) {
+  if (!phoneNumber) return null;
+  
+  const stmt = db.prepare(`
+    INSERT INTO callers (phone_number, first_call_at, last_call_at, total_calls)
+    VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+    ON CONFLICT(phone_number) 
+    DO UPDATE SET 
+      last_call_at = CURRENT_TIMESTAMP,
+      total_calls = total_calls + 1
+  `);
+  
+  return stmt.run(phoneNumber);
+}
+
 export default {
   initializeDatabase,
   createInspection,
@@ -166,5 +215,8 @@ export default {
   getInspectionsByLocation,
   getInspectionStats,
   closeDatabase,
-  getDatabase
+  getDatabase,
+  getCallerByPhoneNumber,
+  saveCallerName,
+  updateCallerLastCall
 };

@@ -16,7 +16,10 @@ import {
   getInspectionsByResult,
   getInspectionsByLocation,
   getInspectionStats,
-  closeDatabase
+  closeDatabase,
+  getCallerByPhoneNumber,
+  saveCallerName,
+  updateCallerLastCall
 } from './database.js';
 import {
   getAllEquipment,
@@ -188,6 +191,22 @@ async function getMCPTools() {
 
   allTools.push({
     type: 'function',
+    name: 'save_caller_name',
+    description: 'Save the caller\'s name associated with their phone number for future calls. Call this when you first learn the inspector\'s name.',
+    parameters: {
+      type: 'object',
+      properties: {
+        caller_name: {
+          type: 'string',
+          description: 'The name of the caller/inspector'
+        }
+      },
+      required: ['caller_name']
+    }
+  });
+
+  allTools.push({
+    type: 'function',
     name: 'submit_inspection_data',
     description: 'Submit structured scaffolding inspection data in JSON format. Must be called before ending the call. The equipment_id must reference a valid equipment ID from the registry.',
     parameters: {
@@ -273,6 +292,44 @@ function validateInspectionData(data) {
 
 // Call an MCP tool or built-in function
 async function callMCPTool(toolName, args, context = {}) {
+  if (toolName === 'save_caller_name') {
+    const { phoneNumber } = context;
+    
+    if (!phoneNumber) {
+      return {
+        success: false,
+        error: 'No phone number available',
+        message: 'Cannot save caller name without phone number'
+      };
+    }
+    
+    if (!args.caller_name || args.caller_name.trim() === '') {
+      return {
+        success: false,
+        error: 'Caller name is required',
+        message: 'Please provide a valid name'
+      };
+    }
+    
+    try {
+      saveCallerName(phoneNumber, args.caller_name.trim());
+      console.log(`👤 Saved caller name: ${args.caller_name} for ${phoneNumber}`);
+      
+      return {
+        success: true,
+        message: `Name saved successfully`,
+        caller_name: args.caller_name.trim()
+      };
+    } catch (error) {
+      console.error('❌ Error saving caller name:', error);
+      return {
+        success: false,
+        error: 'Database error',
+        message: 'Failed to save caller name'
+      };
+    }
+  }
+  
   if (toolName === 'get_equipment_info') {
     const equipment = getEquipmentById(args.equipment_id);
     
@@ -380,6 +437,21 @@ async function callMCPTool(toolName, args, context = {}) {
 fastify.register(async (fastify) => {
   fastify.get('/media-stream', { websocket: true }, (connection, req) => {
     console.log('Client connected to /media-stream');
+    
+    // Extract phone number from query parameters
+    const phoneNumber = req.query?.phone || null;
+    console.log('📱 Caller phone number:', phoneNumber);
+    
+    // Check if this is a returning caller
+    let returningCaller = null;
+    if (phoneNumber) {
+      returningCaller = getCallerByPhoneNumber(phoneNumber);
+      if (returningCaller && returningCaller.caller_name) {
+        console.log(`👋 Returning caller detected: ${returningCaller.caller_name}`);
+      }
+      // Update last call timestamp
+      updateCallerLastCall(phoneNumber);
+    }
 
     const openAiWs = new WebSocket(OPENAI_WS_URL, {
       headers: {
@@ -426,6 +498,13 @@ fastify.register(async (fastify) => {
 
       // Send initial greeting to make AI speak first
       setTimeout(() => {
+        let greetingText;
+        if (returningCaller && returningCaller.caller_name) {
+          greetingText = `Welcome back, ${returningCaller.caller_name}! Please greet them warmly and invite them to begin a scaffolding inspection.`;
+        } else {
+          greetingText = 'Please greet the caller and invite them to begin a scaffolding inspection.';
+        }
+        
         const initialMessage = {
           type: 'conversation.item.create',
           item: {
@@ -434,7 +513,7 @@ fastify.register(async (fastify) => {
             content: [
               {
                 type: 'input_text',
-                text: 'Please greet the caller and invite them to begin a scaffolding inspection.'
+                text: greetingText
               }
             ]
           }
@@ -480,7 +559,8 @@ fastify.register(async (fastify) => {
             const context = {
               inspectionSubmitted,
               inspectionData,
-              streamSid
+              streamSid,
+              phoneNumber
             };
             
             const result = await callMCPTool(name, parsedArgs, context);
@@ -590,7 +670,7 @@ fastify.register(async (fastify) => {
             streamSid = data.start.streamSid;
             console.log('Incoming stream started:', streamSid);
             
-            createInspection(streamSid);
+            createInspection(streamSid, phoneNumber);
             console.log('📋 New inspection record created for stream:', streamSid);
             break;
           default:
@@ -630,10 +710,28 @@ fastify.register(async (fastify) => {
 
 // Incoming call webhook - returns TwiML
 fastify.post('/incoming-call', async (request, reply) => {
+  // Twilio sends the caller's phone number in the 'From' parameter
+  const callerPhoneNumber = request.body.From || null;
+  console.log('📞 Incoming call from:', callerPhoneNumber);
+  
+  // Check if this is a returning caller
+  let callerInfo = null;
+  if (callerPhoneNumber) {
+    callerInfo = getCallerByPhoneNumber(callerPhoneNumber);
+    if (callerInfo) {
+      console.log(`👋 Returning caller: ${callerInfo.caller_name || 'Name not set'} (${callerInfo.total_calls} total calls)`);
+    } else {
+      console.log('🆕 New caller');
+    }
+  }
+  
+  // Encode caller info in the WebSocket URL as query parameters
+  const callerParam = callerPhoneNumber ? `?phone=${encodeURIComponent(callerPhoneNumber)}` : '';
+  
   const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
     <Response>
       <Connect>
-        <Stream url="wss://${request.headers.host}/media-stream" />
+        <Stream url="wss://${request.headers.host}/media-stream${callerParam}" />
       </Connect>
     </Response>`;
 

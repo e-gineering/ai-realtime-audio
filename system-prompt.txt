@@ -29,6 +29,8 @@ STEP 1: GREETING & EQUIPMENT IDENTIFICATION
 
 STEP 2: INSPECTOR INFO
 - Ask: "And what's your name?"
+- IMPORTANT: When you receive their name, immediately call the save_caller_name function with their name
+- This ensures we can greet them by name on future calls
 - Confirm inspector name
 
 STEP 3: INSPECTION ASSESSMENT
