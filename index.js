@@ -9,7 +9,7 @@ import {
   initializeDatabase,
   createInspection,
   getInspectionByStreamSid,
-  getInspectionByTag,
+  getInspectionByEquipmentId,
   saveInspectionData,
   completeInspection,
   getAllInspections,
@@ -18,6 +18,13 @@ import {
   getInspectionStats,
   closeDatabase
 } from './database.js';
+import {
+  getAllEquipment,
+  getEquipmentById,
+  searchEquipmentByLocation,
+  getEquipmentByStatus,
+  getEquipmentStats
+} from './equipment.js';
 
 dotenv.config();
 
@@ -149,14 +156,46 @@ async function getMCPTools() {
 
   allTools.push({
     type: 'function',
-    name: 'submit_inspection_data',
-    description: 'Submit structured scaffolding inspection data in JSON format. Must be called before ending the call.',
+    name: 'get_equipment_info',
+    description: 'Look up equipment information from the registry by equipment ID. Use this to verify equipment exists and get its details before conducting an inspection.',
     parameters: {
       type: 'object',
       properties: {
-        tag_identifier: {
+        equipment_id: {
           type: 'string',
-          description: 'Unique inspection tag number or identifier (e.g., "TAG-12345", "INS-2024-001")'
+          description: 'Equipment ID to look up (e.g., "SCAFF-001")'
+        }
+      },
+      required: ['equipment_id']
+    }
+  });
+
+  allTools.push({
+    type: 'function',
+    name: 'search_equipment_by_location',
+    description: 'Search for equipment by location name. Useful when the inspector knows the location but not the specific equipment ID.',
+    parameters: {
+      type: 'object',
+      properties: {
+        location: {
+          type: 'string',
+          description: 'Location to search for (e.g., "Warehouse A", "Building B")'
+        }
+      },
+      required: ['location']
+    }
+  });
+
+  allTools.push({
+    type: 'function',
+    name: 'submit_inspection_data',
+    description: 'Submit structured scaffolding inspection data in JSON format. Must be called before ending the call. The equipment_id must reference a valid equipment ID from the registry.',
+    parameters: {
+      type: 'object',
+      properties: {
+        equipment_id: {
+          type: 'string',
+          description: 'Equipment ID from the registry (e.g., "SCAFF-001"). Must be validated using get_equipment_info first.'
         },
         inspector_name: {
           type: 'string',
@@ -176,7 +215,7 @@ async function getMCPTools() {
           description: 'Any additional comments, concerns, or observations from the inspection'
         }
       },
-      required: ['tag_identifier', 'inspector_name', 'location', 'inspection_result']
+      required: ['equipment_id', 'inspector_name', 'location', 'inspection_result']
     }
   });
 
@@ -203,8 +242,13 @@ async function getMCPTools() {
 function validateInspectionData(data) {
   const errors = [];
   
-  if (!data.tag_identifier || data.tag_identifier.trim() === '') {
-    errors.push('tag_identifier is required');
+  if (!data.equipment_id || data.equipment_id.trim() === '') {
+    errors.push('equipment_id is required');
+  } else {
+    const equipment = getEquipmentById(data.equipment_id);
+    if (!equipment) {
+      errors.push(`equipment_id "${data.equipment_id}" not found in registry`);
+    }
   }
   
   if (!data.inspector_name || data.inspector_name.trim() === '') {
@@ -229,6 +273,42 @@ function validateInspectionData(data) {
 
 // Call an MCP tool or built-in function
 async function callMCPTool(toolName, args, context = {}) {
+  if (toolName === 'get_equipment_info') {
+    const equipment = getEquipmentById(args.equipment_id);
+    
+    if (!equipment) {
+      return {
+        success: false,
+        error: 'Equipment not found',
+        message: `Equipment ID "${args.equipment_id}" not found in registry. Please verify the equipment ID.`
+      };
+    }
+    
+    return {
+      success: true,
+      equipment: equipment,
+      message: `Found equipment: ${equipment.type} at ${equipment.location}`
+    };
+  }
+  
+  if (toolName === 'search_equipment_by_location') {
+    const results = searchEquipmentByLocation(args.location);
+    
+    if (results.length === 0) {
+      return {
+        success: false,
+        message: `No equipment found at location "${args.location}"`
+      };
+    }
+    
+    return {
+      success: true,
+      equipment: results,
+      count: results.length,
+      message: `Found ${results.length} equipment item(s) at "${args.location}"`
+    };
+  }
+  
   if (toolName === 'submit_inspection_data') {
     const validation = validateInspectionData(args);
     
@@ -238,15 +318,6 @@ async function callMCPTool(toolName, args, context = {}) {
         error: 'Validation failed',
         details: validation.errors,
         message: 'Please provide all required fields: ' + validation.errors.join(', ')
-      };
-    }
-    
-    const existingInspection = getInspectionByTag(args.tag_identifier);
-    if (existingInspection && existingInspection.stream_sid !== context.streamSid) {
-      return {
-        success: false,
-        error: 'Duplicate tag',
-        message: `Tag ${args.tag_identifier} has already been used for another inspection. Please provide a unique tag number.`
       };
     }
     
@@ -573,11 +644,13 @@ fastify.post('/incoming-call', async (request, reply) => {
 fastify.get('/', async (request, reply) => {
   const mcpStatus = Array.from(mcpClients.keys());
   const stats = getInspectionStats();
+  const equipmentStats = getEquipmentStats();
   return {
     status: 'ok',
     message: 'AI Realtime Audio Server - Scaffolding Inspection',
     mcpServers: mcpStatus.length > 0 ? mcpStatus : 'none configured',
-    database: stats
+    database: stats,
+    equipment: equipmentStats
   };
 });
 
@@ -589,13 +662,9 @@ fastify.get('/inspections', async (request, reply) => {
 });
 
 // API endpoint to get inspection by tag
-fastify.get('/inspections/tag/:tagId', async (request, reply) => {
-  const inspection = getInspectionByTag(request.params.tagId);
-  if (!inspection) {
-    reply.code(404).send({ error: 'Inspection not found' });
-    return;
-  }
-  return { inspection };
+fastify.get('/inspections/equipment/:equipmentId', async (request, reply) => {
+  const inspections = getInspectionByEquipmentId(request.params.equipmentId);
+  return { inspections, count: inspections.length };
 });
 
 // API endpoint to get inspections by result
@@ -623,6 +692,30 @@ fastify.get('/inspections/stats', async (request, reply) => {
   return { stats };
 });
 
+fastify.get('/equipment', async (request, reply) => {
+  const equipment = getAllEquipment();
+  return { equipment, count: equipment.length };
+});
+
+fastify.get('/equipment/:equipmentId', async (request, reply) => {
+  const equipment = getEquipmentById(request.params.equipmentId);
+  if (!equipment) {
+    reply.code(404).send({ error: 'Equipment not found' });
+    return;
+  }
+  return { equipment };
+});
+
+fastify.get('/equipment/location/:location', async (request, reply) => {
+  const equipment = searchEquipmentByLocation(request.params.location);
+  return { equipment, count: equipment.length };
+});
+
+fastify.get('/equipment/stats', async (request, reply) => {
+  const stats = getEquipmentStats();
+  return { stats };
+});
+
 // Start the server
 async function start() {
   try {
@@ -638,10 +731,14 @@ async function start() {
     console.log(`🔌 WebSocket endpoint: ws://your-domain/media-stream`);
     console.log(`📊 API endpoints:`);
     console.log(`   GET  /inspections - List all inspections`);
-    console.log(`   GET  /inspections/tag/:tagId - Get inspection by tag`);
+    console.log(`   GET  /inspections/equipment/:equipmentId - Get inspections by equipment ID`);
     console.log(`   GET  /inspections/result/:result - Filter by PASS/FAIL`);
     console.log(`   GET  /inspections/location/:location - Search by location`);
     console.log(`   GET  /inspections/stats - Get statistics`);
+    console.log(`   GET  /equipment - List all equipment`);
+    console.log(`   GET  /equipment/:equipmentId - Get equipment by ID`);
+    console.log(`   GET  /equipment/location/:location - Search equipment by location`);
+    console.log(`   GET  /equipment/stats - Get equipment statistics`);
 
     if (mcpClients.size > 0) {
       console.log(`🔧 MCP servers active: ${Array.from(mcpClients.keys()).join(', ')}`);
