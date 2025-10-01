@@ -1,23 +1,63 @@
-# AI Realtime Audio Assistant
+# AI Realtime Audio Assistant - Scaffolding Inspection
 
-A real-time voice AI assistant powered by OpenAI's Realtime API with Twilio integration and MCP (Model Context Protocol) support for extensible tool capabilities.
+A real-time voice AI assistant for conducting scaffolding safety inspections by phone, powered by OpenAI's Realtime API with Twilio integration, SQLite database storage, and Docker deployment.
 
 ## Features
 
 - **Real-time Voice Interaction**: Speech-to-speech conversation with low latency
+- **Structured Data Collection**: Tag identifier, inspector name, location, pass/fail, and comments
+- **SQLite Database**: Persistent storage of all inspection records
 - **Twilio Integration**: Connect via phone calls
-- **MCP Tool Support**: Extensible tool system for weather, file operations, databases, and more
-- **WebSocket Proxy**: Bridges Twilio media streams with OpenAI Realtime API
-- **Customizable Voice & Personality**: Configure voice and system prompts
+- **REST API**: Query inspections by tag, location, result, or get statistics
+- **Docker Support**: Easy deployment with Docker Compose
+- **MCP Tool Support**: Extensible tool system for additional capabilities
+- **Interrupt Capable**: Users can interrupt the AI mid-response
 
 ## Prerequisites
 
-- Node.js 18+
+### Option 1: Docker (Recommended)
+- Docker
+- Docker Compose
+- OpenAI API key with Realtime API access
+
+### Option 2: Local Development
+- Node.js 20+
 - OpenAI API key with Realtime API access
 - (Optional) Twilio account with phone number for phone integration
 - (Optional) ngrok or similar tool for local development
 
-## Quick Start
+## Quick Start with Docker
+
+1. **Clone and Configure**
+   ```bash
+   cp .env.example .env
+   ```
+
+   Edit `.env` and add your OpenAI API key:
+   ```
+   OPENAI_API_KEY=your_openai_api_key_here
+   ```
+
+2. **Build and Run**
+   ```bash
+   docker-compose up -d
+   ```
+
+3. **View Logs**
+   ```bash
+   docker-compose logs -f
+   ```
+
+4. **Stop**
+   ```bash
+   docker-compose down
+   ```
+
+The server will be available at `http://localhost:5050`
+
+Database will be persisted in `./data/inspections.db`
+
+## Quick Start (Local Development)
 
 1. **Clone and Install**
    ```bash
@@ -101,7 +141,69 @@ The server supports MCP (Model Context Protocol) for extending the AI with tools
 
 See `mcp-config.example.json` for more examples.
 
+## Inspection Data API
+
+The application provides REST API endpoints to query inspection data:
+
+### Get All Inspections
+```bash
+curl http://localhost:5050/inspections
+curl http://localhost:5050/inspections?limit=50
+```
+
+### Get Inspection by Tag
+```bash
+curl http://localhost:5050/inspections/tag/TAG-12345
+```
+
+### Filter by Result (PASS/FAIL)
+```bash
+curl http://localhost:5050/inspections/result/FAIL
+curl http://localhost:5050/inspections/result/PASS?limit=20
+```
+
+### Search by Location
+```bash
+curl http://localhost:5050/inspections/location/Building%207
+```
+
+### Get Statistics
+```bash
+curl http://localhost:5050/inspections/stats
+```
+
+Returns:
+```json
+{
+  "stats": {
+    "total": 150,
+    "passed": 142,
+    "failed": 8,
+    "unique_inspectors": 12,
+    "unique_locations": 25
+  }
+}
+```
+
+## Database
+
+- **Storage**: SQLite database at `./data/inspections.db`
+- **Schema**: Tag identifier, inspector name, location, pass/fail result, comments
+- **Persistence**: Database persisted in Docker volume
+- **Backup**: Simply copy the `data/` directory
+
 ## Usage
+
+### Inspection Call Flow
+
+1. User calls Twilio number
+2. AI: "What's your inspection tag number?"
+3. User provides tag (e.g., "TAG-12345")
+4. AI collects: name, location
+5. AI asks: "Does the scaffolding pass or fail?"
+6. AI asks: "Any concerns to note?"
+7. AI submits structured JSON data to database
+8. AI thanks user and ends call
 
 ### Testing Without Twilio
 

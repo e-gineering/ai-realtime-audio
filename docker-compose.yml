@@ -1,0 +1,42 @@
+services:
+  ai-realtime-audio:
+    build: .
+    container_name: scaffolding-inspection
+    ports:
+      - "5050:5050"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-realtime-preview-2024-10-01}
+      - PORT=5050
+      - VOICE=${VOICE:-alloy}
+      - SYSTEM_MESSAGE_FILE=./system-prompt.txt
+      - DB_PATH=/app/data/inspections.db
+      - NODE_ENV=production
+      # Twilio Configuration (optional)
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER:-}
+      # MCP Configuration (optional)
+      - MCP_SERVERS=${MCP_SERVERS:-}
+    volumes:
+      # Persist database
+      - ./data:/app/data
+      # Optional: mount custom system prompt
+      - ./system-prompt.txt:/app/system-prompt.txt:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5050', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - inspection-network
+
+networks:
+  inspection-network:
+    driver: bridge
+
+volumes:
+  data:
+    driver: local

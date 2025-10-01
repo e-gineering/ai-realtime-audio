@@ -5,3 +5,4 @@ node_modules/
 .claude/
 ngrok.exe
 ngrok.zip
+data/
