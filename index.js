@@ -157,6 +157,7 @@ fastify.register(async (fastify) => {
     });
 
     let streamSid = null;
+    let isAIResponding = false;
 
     const sendSessionUpdate = async () => {
       const tools = await getMCPTools();
@@ -164,7 +165,12 @@ fastify.register(async (fastify) => {
       const sessionUpdate = {
         type: 'session.update',
         session: {
-          turn_detection: { type: 'server_vad' },
+          turn_detection: { 
+            type: 'server_vad',
+            threshold: 0.5,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 200
+          },
           input_audio_format: 'g711_ulaw',
           output_audio_format: 'g711_ulaw',
           voice: VOICE,
@@ -241,6 +247,14 @@ fastify.register(async (fastify) => {
           }
         }
 
+        // Track AI response state for interruption handling
+        if (response.type === 'response.audio.start') {
+          isAIResponding = true;
+        }
+        if (response.type === 'response.audio.done') {
+          isAIResponding = false;
+        }
+
         // Forward audio back to Twilio
         if (response.type === 'response.audio.delta' && response.delta) {
           const audioDelta = {
@@ -263,6 +277,12 @@ fastify.register(async (fastify) => {
         switch (data.event) {
           case 'media':
             if (openAiWs.readyState === WebSocket.OPEN) {
+              if (isAIResponding) {
+                openAiWs.send(JSON.stringify({ type: 'response.cancel' }));
+                openAiWs.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
+                isAIResponding = false;
+              }
+              
               const audioAppend = {
                 type: 'input_audio_buffer.append',
                 audio: data.media.payload
