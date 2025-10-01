@@ -20,6 +20,7 @@ export function initializeDatabase() {
       call_duration_seconds INTEGER,
       
       -- Inspection data (from structured JSON) - nullable until submitted
+      equipment_id TEXT,
       tag_identifier TEXT,
       inspector_name TEXT,
       location TEXT,
@@ -33,6 +34,7 @@ export function initializeDatabase() {
     
     CREATE UNIQUE INDEX IF NOT EXISTS idx_tag_identifier ON inspections(tag_identifier);
     CREATE INDEX IF NOT EXISTS idx_stream_sid ON inspections(stream_sid);
+    CREATE INDEX IF NOT EXISTS idx_equipment_id ON inspections(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_inspector_name ON inspections(inspector_name);
     CREATE INDEX IF NOT EXISTS idx_location ON inspections(location);
     CREATE INDEX IF NOT EXISTS idx_result ON inspections(inspection_result);
@@ -68,6 +70,7 @@ export function saveInspectionData(streamSid, data) {
   const stmt = db.prepare(`
     UPDATE inspections
     SET 
+      equipment_id = ?,
       tag_identifier = ?,
       inspector_name = ?,
       location = ?,
@@ -79,6 +82,7 @@ export function saveInspectionData(streamSid, data) {
   `);
   
   return stmt.run(
+    data.equipment_id,
     data.tag_identifier,
     data.inspector_name,
     data.location,
