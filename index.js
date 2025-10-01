@@ -341,6 +341,27 @@ fastify.register(async (fastify) => {
 
       console.log('Sending session update:', JSON.stringify(sessionUpdate));
       openAiWs.send(JSON.stringify(sessionUpdate));
+
+      // Send initial greeting to make AI speak first
+      setTimeout(() => {
+        const initialMessage = {
+          type: 'conversation.item.create',
+          item: {
+            type: 'message',
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text: 'Please greet the caller and invite them to begin a scaffolding inspection.'
+              }
+            ]
+          }
+        };
+        openAiWs.send(JSON.stringify(initialMessage));
+
+        // Trigger AI response
+        openAiWs.send(JSON.stringify({ type: 'response.create' }));
+      }, SESSION_UPDATE_DELAY_MS + 100);
     };
 
     // Handle OpenAI WebSocket open
