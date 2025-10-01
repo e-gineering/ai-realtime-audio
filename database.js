@@ -174,17 +174,16 @@ export function getCallerByPhoneNumber(phoneNumber) {
 
 export function saveCallerName(phoneNumber, callerName) {
   if (!phoneNumber || !callerName) return null;
-  
+
   const stmt = db.prepare(`
     INSERT INTO callers (phone_number, caller_name, first_call_at, last_call_at, total_calls)
-    VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
-    ON CONFLICT(phone_number) 
-    DO UPDATE SET 
-      caller_name = excluded.caller_name,
-      last_call_at = CURRENT_TIMESTAMP,
-      total_calls = total_calls + 1
+    VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+    ON CONFLICT(phone_number)
+    DO UPDATE SET
+      caller_name = excluded.caller_name
+      -- Only update the name, not call tracking (updateCallerLastCall handles that)
   `);
-  
+
   return stmt.run(phoneNumber, callerName);
 }
 

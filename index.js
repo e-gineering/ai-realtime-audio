@@ -500,9 +500,9 @@ fastify.register(async (fastify) => {
       setTimeout(() => {
         let greetingText;
         if (returningCaller && returningCaller.caller_name) {
-          greetingText = `Welcome back, ${returningCaller.caller_name}! Please greet them warmly and invite them to begin a scaffolding inspection.`;
+          greetingText = `This is a returning caller. Their name is ${returningCaller.caller_name}. Welcome them back warmly and invite them to begin a scaffolding inspection. DO NOT ask for their name - you already know it is ${returningCaller.caller_name}. Use this name for the inspector_name field.`;
         } else {
-          greetingText = 'Please greet the caller and invite them to begin a scaffolding inspection.';
+          greetingText = 'This is a new caller. Please greet them and invite them to begin a scaffolding inspection. You will need to ask for their name.';
         }
         
         const initialMessage = {
