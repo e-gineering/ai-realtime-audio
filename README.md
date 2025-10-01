@@ -40,17 +40,28 @@ A real-time voice AI assistant for conducting scaffolding safety inspections by 
 
 2. **Build and Run**
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
+
+   This will:
+   - Build the Docker image
+   - Start the container in detached mode
+   - Create the `./data` directory for database persistence
+   - Expose the server on port 5050
 
 3. **View Logs**
    ```bash
-   docker-compose logs -f
+   docker compose logs -f
    ```
 
-4. **Stop**
+4. **Stop the Service**
    ```bash
-   docker-compose down
+   docker compose down
+   ```
+
+5. **Rebuild After Changes**
+   ```bash
+   docker compose up -d --build
    ```
 
 The server will be available at `http://localhost:5050`

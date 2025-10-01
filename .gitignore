@@ -6,3 +6,6 @@ node_modules/
 ngrok.exe
 ngrok.zip
 data/
+*.db
+*.db-shm
+*.db-wal
