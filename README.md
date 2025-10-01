@@ -8,6 +8,7 @@ A real-time voice AI assistant for conducting scaffolding safety inspections by 
 - **Structured Data Collection**: Tag identifier, inspector name, location, pass/fail, and comments
 - **SQLite Database**: Persistent storage of all inspection records
 - **Twilio Integration**: Connect via phone calls
+- **Caller Recognition**: Automatically remembers and greets returning callers by name
 - **REST API**: Query inspections by tag, location, result, or get statistics
 - **Docker Support**: Easy deployment with Docker Compose
 - **MCP Tool Support**: Extensible tool system for additional capabilities
@@ -199,7 +200,10 @@ Returns:
 ## Database
 
 - **Storage**: SQLite database at `./data/inspections.db`
-- **Schema**: Tag identifier, inspector name, location, pass/fail result, comments
+- **Schema**: 
+  - **Inspections table**: Equipment ID, inspector name, location, pass/fail result, comments, phone number, timestamps
+  - **Callers table**: Phone number, caller name, first/last call timestamps, total calls
+- **Caller Recognition**: Phone numbers are automatically associated with names for personalized greetings
 - **Persistence**: Database persisted in Docker volume
 - **Backup**: Simply copy the `data/` directory
 
@@ -208,13 +212,15 @@ Returns:
 ### Inspection Call Flow
 
 1. User calls Twilio number
-2. AI: "What's your inspection tag number?"
-3. User provides tag (e.g., "TAG-12345")
-4. AI collects: name, location
-5. AI asks: "Does the scaffolding pass or fail?"
-6. AI asks: "Any concerns to note?"
-7. AI submits structured JSON data to database
-8. AI thanks user and ends call
+2. System recognizes returning callers and greets them by name (e.g., "Welcome back, John!")
+3. AI: "What's your inspection tag number?" (or equipment location)
+4. User provides tag (e.g., "SCAFF-001")
+5. AI collects: name, location
+6. System saves caller's name for future calls
+7. AI asks: "Does the scaffolding pass or fail?"
+8. AI asks: "Any concerns to note?"
+9. AI submits structured JSON data to database
+10. AI thanks user and ends call
 
 ### Testing Without Twilio
 
