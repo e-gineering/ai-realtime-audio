@@ -125,8 +125,41 @@ async function getMCPTools() {
 
   allTools.push({
     type: 'function',
+    name: 'submit_inspection_data',
+    description: 'Submit structured scaffolding inspection data in JSON format. Must be called before ending the call.',
+    parameters: {
+      type: 'object',
+      properties: {
+        tag_identifier: {
+          type: 'string',
+          description: 'Unique inspection tag number or identifier (e.g., "TAG-12345", "INS-2024-001")'
+        },
+        inspector_name: {
+          type: 'string',
+          description: 'Name of the person conducting the inspection'
+        },
+        location: {
+          type: 'string',
+          description: 'Location or site of the scaffolding'
+        },
+        inspection_result: {
+          type: 'string',
+          enum: ['PASS', 'FAIL'],
+          description: 'Overall inspection result - must be exactly "PASS" or "FAIL"'
+        },
+        comments: {
+          type: 'string',
+          description: 'Any additional comments, concerns, or observations from the inspection'
+        }
+      },
+      required: ['tag_identifier', 'inspector_name', 'location', 'inspection_result']
+    }
+  });
+
+  allTools.push({
+    type: 'function',
     name: 'end_call',
-    description: 'End the phone call. Use this when the inspection is complete and all required information has been collected.',
+    description: 'End the phone call. Can only be called AFTER successfully submitting inspection data via submit_inspection_data.',
     parameters: {
       type: 'object',
       properties: {
@@ -142,9 +175,69 @@ async function getMCPTools() {
   return allTools;
 }
 
+// Validate inspection data
+function validateInspectionData(data) {
+  const errors = [];
+  
+  if (!data.tag_identifier || data.tag_identifier.trim() === '') {
+    errors.push('tag_identifier is required');
+  }
+  
+  if (!data.inspector_name || data.inspector_name.trim() === '') {
+    errors.push('inspector_name is required');
+  }
+  
+  if (!data.location || data.location.trim() === '') {
+    errors.push('location is required');
+  }
+  
+  if (!data.inspection_result) {
+    errors.push('inspection_result is required');
+  } else if (data.inspection_result !== 'PASS' && data.inspection_result !== 'FAIL') {
+    errors.push('inspection_result must be exactly "PASS" or "FAIL"');
+  }
+  
+  return {
+    valid: errors.length === 0,
+    errors: errors
+  };
+}
+
 // Call an MCP tool or built-in function
 async function callMCPTool(toolName, args, context = {}) {
+  if (toolName === 'submit_inspection_data') {
+    const validation = validateInspectionData(args);
+    
+    if (!validation.valid) {
+      return {
+        success: false,
+        error: 'Validation failed',
+        details: validation.errors,
+        message: 'Please provide all required fields: ' + validation.errors.join(', ')
+      };
+    }
+    
+    console.log('📋 Inspection Data Submitted:', JSON.stringify(args, null, 2));
+    
+    context.inspectionSubmitted = true;
+    context.inspectionData = args;
+    
+    return {
+      success: true,
+      message: 'Inspection data successfully recorded',
+      data: args
+    };
+  }
+  
   if (toolName === 'end_call') {
+    if (!context.inspectionSubmitted) {
+      return {
+        success: false,
+        error: 'Cannot end call without submitting inspection data first',
+        message: 'You must call submit_inspection_data before ending the call'
+      };
+    }
+    
     return {
       success: true,
       message: 'Call will be ended',
@@ -182,6 +275,8 @@ fastify.register(async (fastify) => {
 
     let streamSid = null;
     let isAIResponding = false;
+    let inspectionSubmitted = false;
+    let inspectionData = null;
 
     const sendSessionUpdate = async () => {
       const tools = await getMCPTools();
@@ -244,7 +339,18 @@ fastify.register(async (fastify) => {
               throw new Error(`Invalid JSON arguments: ${parseError.message}`);
             }
 
-            const result = await callMCPTool(name, parsedArgs);
+            const context = {
+              inspectionSubmitted,
+              inspectionData
+            };
+            
+            const result = await callMCPTool(name, parsedArgs, context);
+
+            if (name === 'submit_inspection_data' && result.success) {
+              inspectionSubmitted = true;
+              inspectionData = parsedArgs;
+              console.log('✅ Inspection data validated and stored');
+            }
 
             // Send function result back to OpenAI
             openAiWs.send(JSON.stringify({
@@ -257,7 +363,7 @@ fastify.register(async (fastify) => {
             }));
 
             // Handle end_call function
-            if (name === 'end_call') {
+            if (name === 'end_call' && result.success) {
               console.log(`📞 Call ending requested: ${parsedArgs.reason}`);
               
               // Send a final message asking AI to say goodbye
