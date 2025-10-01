@@ -25,6 +25,7 @@ fastify.register(FastifyWS);
 fastify.register(import('@fastify/formbody'));
 
 const OPENAI_WS_URL = `wss://api.openai.com/v1/realtime?model=${OPENAI_MODEL}`;
+const SESSION_UPDATE_DELAY_MS = 250;
 
 // MCP client management
 const mcpClients = new Map();
@@ -179,7 +180,7 @@ fastify.register(async (fastify) => {
     // Handle OpenAI WebSocket open
     openAiWs.on('open', () => {
       console.log('Connected to OpenAI Realtime API');
-      setTimeout(sendSessionUpdate, 250);
+      setTimeout(sendSessionUpdate, SESSION_UPDATE_DELAY_MS);
     });
 
     // Handle messages from OpenAI
