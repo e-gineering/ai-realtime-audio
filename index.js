@@ -21,6 +21,7 @@ if (!OPENAI_API_KEY) {
 
 const fastify = Fastify();
 fastify.register(FastifyWS);
+fastify.register(import('@fastify/formbody'));
 
 const OPENAI_WS_URL = 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01';
 
@@ -257,7 +258,7 @@ fastify.register(async (fastify) => {
 });
 
 // Incoming call webhook - returns TwiML
-fastify.all('/incoming-call', async (request, reply) => {
+fastify.post('/incoming-call', async (request, reply) => {
   const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
     <Response>
       <Connect>
