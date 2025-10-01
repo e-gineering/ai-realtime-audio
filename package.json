@@ -1,0 +1,36 @@
+{
+  "name": "ai-realtime-audio",
+  "version": "1.0.0",
+  "description": "AI realtime audio assistant with OpenAI Realtime API, Twilio, and MCP support",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/e-gineering/ai-realtime-audio.git"
+  },
+  "keywords": [
+    "openai",
+    "realtime-api",
+    "twilio",
+    "voice-ai",
+    "mcp"
+  ],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/e-gineering/ai-realtime-audio/issues"
+  },
+  "homepage": "https://github.com/e-gineering/ai-realtime-audio#readme",
+  "dependencies": {
+    "@fastify/formbody": "^7.4.0",
+    "@fastify/websocket": "^10.0.1",
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.28.1",
+    "ws": "^8.18.0"
+  }
+}
