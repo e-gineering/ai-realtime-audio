@@ -21,7 +21,6 @@ export function initializeDatabase() {
       
       -- Inspection data (from structured JSON) - nullable until submitted
       equipment_id TEXT,
-      tag_identifier TEXT,
       inspector_name TEXT,
       location TEXT,
       inspection_result TEXT CHECK(inspection_result IN ('PASS', 'FAIL') OR inspection_result IS NULL),
@@ -32,7 +31,6 @@ export function initializeDatabase() {
       status TEXT DEFAULT 'in_progress' CHECK(status IN ('in_progress', 'completed', 'failed'))
     );
     
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_tag_identifier ON inspections(tag_identifier);
     CREATE INDEX IF NOT EXISTS idx_stream_sid ON inspections(stream_sid);
     CREATE INDEX IF NOT EXISTS idx_equipment_id ON inspections(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_inspector_name ON inspections(inspector_name);
@@ -61,9 +59,9 @@ export function getInspectionByStreamSid(streamSid) {
   return stmt.get(streamSid);
 }
 
-export function getInspectionByTag(tagIdentifier) {
-  const stmt = db.prepare('SELECT * FROM inspections WHERE tag_identifier = ?');
-  return stmt.get(tagIdentifier);
+export function getInspectionByEquipmentId(equipmentId) {
+  const stmt = db.prepare('SELECT * FROM inspections WHERE equipment_id = ? ORDER BY call_started_at DESC');
+  return stmt.all(equipmentId);
 }
 
 export function saveInspectionData(streamSid, data) {
@@ -71,7 +69,6 @@ export function saveInspectionData(streamSid, data) {
     UPDATE inspections
     SET 
       equipment_id = ?,
-      tag_identifier = ?,
       inspector_name = ?,
       location = ?,
       inspection_result = ?,
@@ -83,7 +80,6 @@ export function saveInspectionData(streamSid, data) {
   
   return stmt.run(
     data.equipment_id,
-    data.tag_identifier,
     data.inspector_name,
     data.location,
     data.inspection_result,
@@ -162,7 +158,7 @@ export default {
   initializeDatabase,
   createInspection,
   getInspectionByStreamSid,
-  getInspectionByTag,
+  getInspectionByEquipmentId,
   saveInspectionData,
   completeInspection,
   getAllInspections,

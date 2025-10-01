@@ -9,7 +9,7 @@ import {
   initializeDatabase,
   createInspection,
   getInspectionByStreamSid,
-  getInspectionByTag,
+  getInspectionByEquipmentId,
   saveInspectionData,
   completeInspection,
   getAllInspections,
@@ -186,10 +186,6 @@ async function getMCPTools() {
           type: 'string',
           description: 'Equipment ID from the registry (e.g., "SCAFF-001"). Must be validated using get_equipment_info first.'
         },
-        tag_identifier: {
-          type: 'string',
-          description: 'Unique inspection tag number or identifier (e.g., "TAG-12345", "INS-2024-001")'
-        },
         inspector_name: {
           type: 'string',
           description: 'Name of the person conducting the inspection'
@@ -208,7 +204,7 @@ async function getMCPTools() {
           description: 'Any additional comments, concerns, or observations from the inspection'
         }
       },
-      required: ['equipment_id', 'tag_identifier', 'inspector_name', 'location', 'inspection_result']
+      required: ['equipment_id', 'inspector_name', 'location', 'inspection_result']
     }
   });
 
@@ -242,10 +238,6 @@ function validateInspectionData(data) {
     if (!equipment) {
       errors.push(`equipment_id "${data.equipment_id}" not found in registry`);
     }
-  }
-  
-  if (!data.tag_identifier || data.tag_identifier.trim() === '') {
-    errors.push('tag_identifier is required');
   }
   
   if (!data.inspector_name || data.inspector_name.trim() === '') {
@@ -315,15 +307,6 @@ async function callMCPTool(toolName, args, context = {}) {
         error: 'Validation failed',
         details: validation.errors,
         message: 'Please provide all required fields: ' + validation.errors.join(', ')
-      };
-    }
-    
-    const existingInspection = getInspectionByTag(args.tag_identifier);
-    if (existingInspection && existingInspection.stream_sid !== context.streamSid) {
-      return {
-        success: false,
-        error: 'Duplicate tag',
-        message: `Tag ${args.tag_identifier} has already been used for another inspection. Please provide a unique tag number.`
       };
     }
     
@@ -639,13 +622,9 @@ fastify.get('/inspections', async (request, reply) => {
 });
 
 // API endpoint to get inspection by tag
-fastify.get('/inspections/tag/:tagId', async (request, reply) => {
-  const inspection = getInspectionByTag(request.params.tagId);
-  if (!inspection) {
-    reply.code(404).send({ error: 'Inspection not found' });
-    return;
-  }
-  return { inspection };
+fastify.get('/inspections/equipment/:equipmentId', async (request, reply) => {
+  const inspections = getInspectionByEquipmentId(request.params.equipmentId);
+  return { inspections, count: inspections.length };
 });
 
 // API endpoint to get inspections by result
@@ -712,7 +691,7 @@ async function start() {
     console.log(`🔌 WebSocket endpoint: ws://your-domain/media-stream`);
     console.log(`📊 API endpoints:`);
     console.log(`   GET  /inspections - List all inspections`);
-    console.log(`   GET  /inspections/tag/:tagId - Get inspection by tag`);
+    console.log(`   GET  /inspections/equipment/:equipmentId - Get inspections by equipment ID`);
     console.log(`   GET  /inspections/result/:result - Filter by PASS/FAIL`);
     console.log(`   GET  /inspections/location/:location - Search by location`);
     console.log(`   GET  /inspections/stats - Get statistics`);
