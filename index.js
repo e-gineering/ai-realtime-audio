@@ -197,7 +197,14 @@ fastify.register(async (fastify) => {
           console.log(`Function call: ${name}`, args);
 
           try {
-            const result = await callMCPTool(name, JSON.parse(args));
+            let parsedArgs;
+            try {
+              parsedArgs = JSON.parse(args);
+            } catch (parseError) {
+              throw new Error(`Invalid JSON arguments: ${parseError.message}`);
+            }
+
+            const result = await callMCPTool(name, parsedArgs);
 
             // Send function result back to OpenAI
             openAiWs.send(JSON.stringify({
