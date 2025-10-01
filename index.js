@@ -446,11 +446,13 @@ fastify.register(async (fastify) => {
     let returningCaller = null;
     if (phoneNumber) {
       returningCaller = getCallerByPhoneNumber(phoneNumber);
-      if (returningCaller && returningCaller.caller_name) {
-        console.log(`👋 Returning caller detected: ${returningCaller.caller_name}`);
+      if (returningCaller) {
+        // Only update call tracking for existing callers
+        updateCallerLastCall(phoneNumber);
+        if (returningCaller.caller_name) {
+          console.log(`👋 Returning caller detected: ${returningCaller.caller_name}`);
+        }
       }
-      // Update last call timestamp
-      updateCallerLastCall(phoneNumber);
     }
 
     const openAiWs = new WebSocket(OPENAI_WS_URL, {
