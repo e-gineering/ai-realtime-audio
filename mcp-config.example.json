@@ -1,0 +1,54 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/directory"],
+      "description": "File system operations (read/write files in allowed directories)"
+    },
+    "weather": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-weather"],
+      "env": {
+        "WEATHER_API_KEY": "your_weather_api_key_here"
+      },
+      "description": "Weather information lookup"
+    },
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "/path/to/database.db"],
+      "description": "SQLite database operations"
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "your_github_token_here"
+      },
+      "description": "GitHub API operations"
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "description": "Persistent memory for the AI assistant"
+    }
+  },
+  "notes": [
+    "This is a reference configuration showing available MCP servers.",
+    "To use these servers, add them to your .env file using the format:",
+    "MCP_SERVERS=weather,memory",
+    "MCP_WEATHER_COMMAND=npx -y @modelcontextprotocol/server-weather",
+    "MCP_MEMORY_COMMAND=npx -y @modelcontextprotocol/server-memory",
+    "",
+    "For servers that need environment variables (like API keys), add them to .env:",
+    "WEATHER_API_KEY=your_key_here",
+    "",
+    "Popular MCP servers:",
+    "- @modelcontextprotocol/server-filesystem: File operations",
+    "- @modelcontextprotocol/server-weather: Weather data",
+    "- @modelcontextprotocol/server-sqlite: Database queries",
+    "- @modelcontextprotocol/server-github: GitHub operations",
+    "- @modelcontextprotocol/server-memory: Persistent memory",
+    "- @modelcontextprotocol/server-brave-search: Web search",
+    "- @modelcontextprotocol/server-slack: Slack integration"
+  ]
+}
