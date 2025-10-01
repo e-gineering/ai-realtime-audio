@@ -19,11 +19,11 @@ export function initializeDatabase() {
       call_ended_at DATETIME,
       call_duration_seconds INTEGER,
       
-      -- Inspection data (from structured JSON)
-      tag_identifier TEXT NOT NULL,
-      inspector_name TEXT NOT NULL,
-      location TEXT NOT NULL,
-      inspection_result TEXT NOT NULL CHECK(inspection_result IN ('PASS', 'FAIL')),
+      -- Inspection data (from structured JSON) - nullable until submitted
+      tag_identifier TEXT,
+      inspector_name TEXT,
+      location TEXT,
+      inspection_result TEXT CHECK(inspection_result IN ('PASS', 'FAIL') OR inspection_result IS NULL),
       comments TEXT,
       
       -- System metadata
