@@ -123,11 +123,35 @@ async function getMCPTools() {
     }
   }
 
+  allTools.push({
+    type: 'function',
+    name: 'end_call',
+    description: 'End the phone call. Use this when the inspection is complete and all required information has been collected.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reason: {
+          type: 'string',
+          description: 'Brief reason for ending the call (e.g., "inspection_complete", "user_requested")'
+        }
+      },
+      required: ['reason']
+    }
+  });
+
   return allTools;
 }
 
-// Call an MCP tool
-async function callMCPTool(toolName, args) {
+// Call an MCP tool or built-in function
+async function callMCPTool(toolName, args, context = {}) {
+  if (toolName === 'end_call') {
+    return {
+      success: true,
+      message: 'Call will be ended',
+      reason: args.reason || 'unknown'
+    };
+  }
+
   const [serverName, ...toolNameParts] = toolName.split('_');
   const actualToolName = toolNameParts.join('_');
 
@@ -157,6 +181,7 @@ fastify.register(async (fastify) => {
     });
 
     let streamSid = null;
+    let isAIResponding = false;
 
     const sendSessionUpdate = async () => {
       const tools = await getMCPTools();
@@ -164,7 +189,12 @@ fastify.register(async (fastify) => {
       const sessionUpdate = {
         type: 'session.update',
         session: {
-          turn_detection: { type: 'server_vad' },
+          turn_detection: { 
+            type: 'server_vad',
+            threshold: 0.5,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 200
+          },
           input_audio_format: 'g711_ulaw',
           output_audio_format: 'g711_ulaw',
           voice: VOICE,
@@ -226,8 +256,29 @@ fastify.register(async (fastify) => {
               }
             }));
 
-            // Request a new response
-            openAiWs.send(JSON.stringify({ type: 'response.create' }));
+            // Handle end_call function
+            if (name === 'end_call') {
+              console.log(`📞 Call ending requested: ${parsedArgs.reason}`);
+              
+              // Send a final message asking AI to say goodbye
+              openAiWs.send(JSON.stringify({ type: 'response.create' }));
+              
+              // Wait for AI response to complete, then hang up
+              setTimeout(() => {
+                if (streamSid && connection.readyState === connection.OPEN) {
+                  const hangupMessage = {
+                    event: 'clear',
+                    streamSid: streamSid
+                  };
+                  connection.send(JSON.stringify(hangupMessage));
+                  connection.close();
+                  console.log('📞 Call ended');
+                }
+              }, 3000);
+            } else {
+              // Request a new response for non-hangup functions
+              openAiWs.send(JSON.stringify({ type: 'response.create' }));
+            }
           } catch (error) {
             console.error('Error calling MCP tool:', error);
             openAiWs.send(JSON.stringify({
@@ -239,6 +290,14 @@ fastify.register(async (fastify) => {
               }
             }));
           }
+        }
+
+        // Track AI response state for interruption handling
+        if (response.type === 'response.audio.start') {
+          isAIResponding = true;
+        }
+        if (response.type === 'response.audio.done') {
+          isAIResponding = false;
         }
 
         // Forward audio back to Twilio
@@ -263,6 +322,12 @@ fastify.register(async (fastify) => {
         switch (data.event) {
           case 'media':
             if (openAiWs.readyState === WebSocket.OPEN) {
+              if (isAIResponding) {
+                openAiWs.send(JSON.stringify({ type: 'response.cancel' }));
+                openAiWs.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
+                isAIResponding = false;
+              }
+              
               const audioAppend = {
                 type: 'input_audio_buffer.append',
                 audio: data.media.payload

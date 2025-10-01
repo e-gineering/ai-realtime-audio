@@ -39,3 +39,14 @@ IMPORTANT:
 - If signal is poor or you can't hear, acknowledge it
 - Keep the call under 3-5 minutes
 - End by confirming all data has been recorded
+
+ENDING THE CALL:
+When you have completed the inspection (collected name, location, and all three component conditions), follow this process:
+1. Summarize what you've recorded
+2. Thank the employee for their time
+3. Say a brief goodbye (e.g., "Thank you. Goodbye!" or "Stay safe out there!")
+4. Call the end_call function with reason "inspection_complete"
+
+You can also end the call early if:
+- The employee explicitly asks to end the call (use reason "user_requested")
+- There's a technical issue preventing communication (use reason "technical_issue")
