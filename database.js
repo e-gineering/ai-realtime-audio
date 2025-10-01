@@ -181,8 +181,9 @@ export function saveCallerName(phoneNumber, callerName) {
     ON CONFLICT(phone_number)
     DO UPDATE SET
       caller_name = excluded.caller_name,
-      last_call_at = CURRENT_TIMESTAMP
-      -- Update name and timestamp, but not total_calls (updateCallerLastCall handles increment)
+      last_call_at = CURRENT_TIMESTAMP,
+      total_calls = total_calls + 1
+      -- Consistent behavior: always increment call count when name is saved/updated
   `);
 
   return stmt.run(phoneNumber, callerName);

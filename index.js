@@ -447,9 +447,10 @@ fastify.register(async (fastify) => {
     if (phoneNumber) {
       returningCaller = getCallerByPhoneNumber(phoneNumber);
       if (returningCaller) {
-        // Only update call tracking for existing callers
-        updateCallerLastCall(phoneNumber);
+        // Only increment call count if they already have a name
+        // (if no name, count will be incremented when saveCallerName is called)
         if (returningCaller.caller_name) {
+          updateCallerLastCall(phoneNumber);
           console.log(`👋 Returning caller detected: ${returningCaller.caller_name}`);
         }
       }
