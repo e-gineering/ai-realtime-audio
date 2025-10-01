@@ -46,11 +46,19 @@ fastify.register(FastifyWS);
 fastify.register(import('@fastify/formbody'));
 
 const OPENAI_WS_URL = `wss://api.openai.com/v1/realtime?model=${OPENAI_MODEL}`;
-const SESSION_UPDATE_DELAY_MS = 250;
-const GREETING_DELAY_OFFSET_MS = 100; // Additional delay after session update to ensure session is ready
-const MESSAGE_SEQUENCE_DELAY_MS = 50; // Delay between WebSocket messages to ensure proper ordering
-const TOTAL_GREETING_DELAY_MS = SESSION_UPDATE_DELAY_MS + GREETING_DELAY_OFFSET_MS; // Combined delay to ensure session is configured before greeting
 
+// Timing constants for session and message handling.
+// These values are defaults chosen based on observed network and system latency in typical deployments.
+// Adjust via environment variables to tune for your environment.
+
+// Delay after session update before sending greeting (ms)
+const SESSION_UPDATE_DELAY_MS = Number(process.env.SESSION_UPDATE_DELAY_MS) || 250;
+// Additional delay after session update to ensure session is ready (ms)
+const GREETING_DELAY_OFFSET_MS = Number(process.env.GREETING_DELAY_OFFSET_MS) || 100;
+// Delay between WebSocket messages to ensure proper ordering (ms)
+const MESSAGE_SEQUENCE_DELAY_MS = Number(process.env.MESSAGE_SEQUENCE_DELAY_MS) || 50;
+// Combined delay to ensure session is configured before greeting (ms)
+const TOTAL_GREETING_DELAY_MS = SESSION_UPDATE_DELAY_MS + GREETING_DELAY_OFFSET_MS;
 // MCP client management
 const mcpClients = new Map();
 
