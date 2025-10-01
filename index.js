@@ -48,6 +48,7 @@ fastify.register(import('@fastify/formbody'));
 const OPENAI_WS_URL = `wss://api.openai.com/v1/realtime?model=${OPENAI_MODEL}`;
 const SESSION_UPDATE_DELAY_MS = 250;
 const GREETING_DELAY_OFFSET_MS = 100; // Additional delay after session update to ensure session is ready
+const MESSAGE_SEQUENCE_DELAY_MS = 50; // Delay between WebSocket messages to ensure proper ordering
 
 // MCP client management
 const mcpClients = new Map();
@@ -360,8 +361,10 @@ fastify.register(async (fastify) => {
         };
         openAiWs.send(JSON.stringify(initialMessage));
 
-        // Trigger AI response
-        openAiWs.send(JSON.stringify({ type: 'response.create' }));
+        // Trigger AI response after a small delay to ensure proper message sequencing
+        setTimeout(() => {
+          openAiWs.send(JSON.stringify({ type: 'response.create' }));
+        }, MESSAGE_SEQUENCE_DELAY_MS);
       }, SESSION_UPDATE_DELAY_MS + GREETING_DELAY_OFFSET_MS);
     };
 
@@ -421,9 +424,11 @@ fastify.register(async (fastify) => {
             // Handle end_call function
             if (name === 'end_call' && result.success) {
               console.log(`📞 Call ending requested: ${parsedArgs.reason}`);
-              
+
               // Send a final message asking AI to say goodbye
-              openAiWs.send(JSON.stringify({ type: 'response.create' }));
+              setTimeout(() => {
+                openAiWs.send(JSON.stringify({ type: 'response.create' }));
+              }, MESSAGE_SEQUENCE_DELAY_MS);
               
               // Wait for AI response to complete, then hang up
               setTimeout(() => {
@@ -439,7 +444,9 @@ fastify.register(async (fastify) => {
               }, 3000);
             } else {
               // Request a new response for non-hangup functions
-              openAiWs.send(JSON.stringify({ type: 'response.create' }));
+              setTimeout(() => {
+                openAiWs.send(JSON.stringify({ type: 'response.create' }));
+              }, MESSAGE_SEQUENCE_DELAY_MS);
             }
           } catch (error) {
             console.error('Error calling MCP tool:', error);
@@ -486,7 +493,9 @@ fastify.register(async (fastify) => {
             if (openAiWs.readyState === WebSocket.OPEN) {
               if (isAIResponding) {
                 openAiWs.send(JSON.stringify({ type: 'response.cancel' }));
-                openAiWs.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
+                setTimeout(() => {
+                  openAiWs.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
+                }, MESSAGE_SEQUENCE_DELAY_MS);
                 isAIResponding = false;
               }
               
