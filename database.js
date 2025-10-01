@@ -177,13 +177,13 @@ export function saveCallerName(phoneNumber, callerName) {
 
   const stmt = db.prepare(`
     INSERT INTO callers (phone_number, caller_name, first_call_at, last_call_at, total_calls)
-    VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+    VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
     ON CONFLICT(phone_number)
     DO UPDATE SET
       caller_name = excluded.caller_name,
-      last_call_at = CURRENT_TIMESTAMP,
-      total_calls = total_calls + 1
-      -- Consistent behavior: always increment call count when name is saved/updated
+      last_call_at = CURRENT_TIMESTAMP
+      -- Only update name and timestamp, never increment call count
+      -- Call tracking is handled separately per WebSocket connection
   `);
 
   return stmt.run(phoneNumber, callerName);

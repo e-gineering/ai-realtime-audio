@@ -293,8 +293,8 @@ function validateInspectionData(data) {
 // Call an MCP tool or built-in function
 async function callMCPTool(toolName, args, context = {}) {
   if (toolName === 'save_caller_name') {
-    const { phoneNumber } = context;
-    
+    const { phoneNumber, callCounted } = context;
+
     if (!phoneNumber) {
       return {
         success: false,
@@ -302,7 +302,7 @@ async function callMCPTool(toolName, args, context = {}) {
         message: 'Cannot save caller name without phone number'
       };
     }
-    
+
     if (!args.caller_name || args.caller_name.trim() === '') {
       return {
         success: false,
@@ -310,11 +310,20 @@ async function callMCPTool(toolName, args, context = {}) {
         message: 'Please provide a valid name'
       };
     }
-    
+
     try {
+      const wasNewCaller = !getCallerByPhoneNumber(phoneNumber);
       saveCallerName(phoneNumber, args.caller_name.trim());
       console.log(`👤 Saved caller name: ${args.caller_name} for ${phoneNumber}`);
-      
+
+      // If this is a new caller and we haven't counted the call yet, count it now
+      if (wasNewCaller && !callCounted) {
+        updateCallerLastCall(phoneNumber);
+        console.log(`📊 Incremented call count for new caller`);
+        // Update context to mark call as counted
+        context.callCounted = true;
+      }
+
       return {
         success: true,
         message: `Name saved successfully`,
@@ -444,13 +453,15 @@ fastify.register(async (fastify) => {
     
     // Check if this is a returning caller
     let returningCaller = null;
+    let callCounted = false;
+
     if (phoneNumber) {
       returningCaller = getCallerByPhoneNumber(phoneNumber);
       if (returningCaller) {
-        // Only increment call count if they already have a name
-        // (if no name, count will be incremented when saveCallerName is called)
+        // Increment call count once per connection for existing callers
+        updateCallerLastCall(phoneNumber);
+        callCounted = true;
         if (returningCaller.caller_name) {
-          updateCallerLastCall(phoneNumber);
           console.log(`👋 Returning caller detected: ${returningCaller.caller_name}`);
         }
       }
@@ -563,10 +574,16 @@ fastify.register(async (fastify) => {
               inspectionSubmitted,
               inspectionData,
               streamSid,
-              phoneNumber
+              phoneNumber,
+              callCounted
             };
             
             const result = await callMCPTool(name, parsedArgs, context);
+
+            // Update callCounted if it was changed by the tool
+            if (context.callCounted !== undefined) {
+              callCounted = context.callCounted;
+            }
 
             if (name === 'submit_inspection_data' && result.success) {
               inspectionSubmitted = true;
