@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import FastifyWS from '@fastify/websocket';
+import FastifyBasicAuth from '@fastify/basic-auth';
 import WebSocket from 'ws';
-import dotenv from 'dotenv';
 import { readFileSync } from 'fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -28,14 +28,14 @@ import {
   getEquipmentStats
 } from './equipment.js';
 
-dotenv.config();
-
 const {
   OPENAI_API_KEY,
   PORT = 5050,
   SYSTEM_MESSAGE_FILE = './system-prompt.txt',
   VOICE = 'alloy',
-  OPENAI_MODEL = 'gpt-4o-realtime-preview-2024-10-01'
+  OPENAI_MODEL = 'gpt-realtime',
+  BASIC_AUTH_USER = 'admin',
+  BASIC_AUTH_PASS = 'changeme'
 } = process.env;
 
 let SYSTEM_MESSAGE = 'You are a helpful AI assistant.';
@@ -53,6 +53,18 @@ if (!OPENAI_API_KEY) {
 const fastify = Fastify();
 fastify.register(FastifyWS);
 fastify.register(import('@fastify/formbody'));
+
+// Register basic auth
+fastify.register(FastifyBasicAuth, {
+  validate(username, password, req, reply, done) {
+    if (username === BASIC_AUTH_USER && password === BASIC_AUTH_PASS) {
+      done();
+    } else {
+      done(new Error('Invalid credentials'));
+    }
+  },
+  authenticate: true
+});
 
 const OPENAI_WS_URL = `wss://api.openai.com/v1/realtime?model=${OPENAI_MODEL}`;
 
@@ -772,20 +784,20 @@ fastify.get('/', async (request, reply) => {
 });
 
 // API endpoint to get all inspections
-fastify.get('/inspections', async (request, reply) => {
+fastify.get('/inspections', { onRequest: fastify.basicAuth }, async (request, reply) => {
   const limit = parseInt(request.query.limit) || 100;
   const inspections = getAllInspections(limit);
   return { inspections, count: inspections.length };
 });
 
 // API endpoint to get inspection by tag
-fastify.get('/inspections/equipment/:equipmentId', async (request, reply) => {
+fastify.get('/inspections/equipment/:equipmentId', { onRequest: fastify.basicAuth }, async (request, reply) => {
   const inspections = getInspectionByEquipmentId(request.params.equipmentId);
   return { inspections, count: inspections.length };
 });
 
 // API endpoint to get inspections by result
-fastify.get('/inspections/result/:result', async (request, reply) => {
+fastify.get('/inspections/result/:result', { onRequest: fastify.basicAuth }, async (request, reply) => {
   const result = request.params.result.toUpperCase();
   if (result !== 'PASS' && result !== 'FAIL') {
     reply.code(400).send({ error: 'Result must be PASS or FAIL' });
@@ -797,24 +809,24 @@ fastify.get('/inspections/result/:result', async (request, reply) => {
 });
 
 // API endpoint to search inspections by location
-fastify.get('/inspections/location/:location', async (request, reply) => {
+fastify.get('/inspections/location/:location', { onRequest: fastify.basicAuth }, async (request, reply) => {
   const limit = parseInt(request.query.limit) || 100;
   const inspections = getInspectionsByLocation(request.params.location, limit);
   return { inspections, count: inspections.length };
 });
 
 // API endpoint to get statistics
-fastify.get('/inspections/stats', async (request, reply) => {
+fastify.get('/inspections/stats', { onRequest: fastify.basicAuth }, async (request, reply) => {
   const stats = getInspectionStats();
   return { stats };
 });
 
-fastify.get('/equipment', async (request, reply) => {
+fastify.get('/equipment', { onRequest: fastify.basicAuth }, async (request, reply) => {
   const equipment = getAllEquipment();
   return { equipment, count: equipment.length };
 });
 
-fastify.get('/equipment/:equipmentId', async (request, reply) => {
+fastify.get('/equipment/:equipmentId', { onRequest: fastify.basicAuth }, async (request, reply) => {
   const equipment = getEquipmentById(request.params.equipmentId);
   if (!equipment) {
     reply.code(404).send({ error: 'Equipment not found' });
@@ -823,12 +835,12 @@ fastify.get('/equipment/:equipmentId', async (request, reply) => {
   return { equipment };
 });
 
-fastify.get('/equipment/location/:location', async (request, reply) => {
+fastify.get('/equipment/location/:location', { onRequest: fastify.basicAuth }, async (request, reply) => {
   const equipment = searchEquipmentByLocation(request.params.location);
   return { equipment, count: equipment.length };
 });
 
-fastify.get('/equipment/stats', async (request, reply) => {
+fastify.get('/equipment/stats', { onRequest: fastify.basicAuth }, async (request, reply) => {
   const stats = getEquipmentStats();
   return { stats };
 });
