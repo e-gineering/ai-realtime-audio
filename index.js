@@ -237,21 +237,6 @@ async function getMCPTools() {
     }
   });
 
-  allTools.push({
-    type: 'function',
-    name: 'end_call',
-    description: 'End the phone call. Can only be called AFTER successfully submitting inspection data via submit_inspection_data.',
-    parameters: {
-      type: 'object',
-      properties: {
-        reason: {
-          type: 'string',
-          description: 'Brief reason for ending the call (e.g., "inspection_complete", "user_requested")'
-        }
-      },
-      required: ['reason']
-    }
-  });
 
   return allTools;
 }
@@ -400,21 +385,6 @@ async function callMCPTool(toolName, args, context = {}) {
     }
   }
   
-  if (toolName === 'end_call') {
-    if (!context.inspectionSubmitted) {
-      return {
-        success: false,
-        error: 'Cannot end call without submitting inspection data first',
-        message: 'You must call submit_inspection_data before ending the call'
-      };
-    }
-    
-    return {
-      success: true,
-      message: 'Call will be ended',
-      reason: args.reason || 'unknown'
-    };
-  }
 
   const [serverName, ...toolNameParts] = toolName.split('_');
   const actualToolName = toolNameParts.join('_');
@@ -546,33 +516,10 @@ fastify.register(async (fastify) => {
               }
             }));
 
-            // Handle end_call function
-            if (name === 'end_call' && result.success) {
-              console.log(`📞 Call ending requested: ${parsedArgs.reason}`);
-
-              // Send a final message asking AI to say goodbye
-              setTimeout(() => {
-                openAiWs.send(JSON.stringify({ type: 'response.create' }));
-              }, MESSAGE_SEQUENCE_DELAY_MS);
-              
-              // Wait for AI response to complete, then hang up
-              setTimeout(() => {
-                if (streamSid && connection.readyState === connection.OPEN) {
-                  const hangupMessage = {
-                    event: 'clear',
-                    streamSid: streamSid
-                  };
-                  connection.send(JSON.stringify(hangupMessage));
-                  connection.close();
-                  console.log('📞 Call ended');
-                }
-              }, 3000);
-            } else {
-              // Request a new response for non-hangup functions
-              setTimeout(() => {
-                openAiWs.send(JSON.stringify({ type: 'response.create' }));
-              }, MESSAGE_SEQUENCE_DELAY_MS);
-            }
+            // Request a new response after any function call
+            setTimeout(() => {
+              openAiWs.send(JSON.stringify({ type: 'response.create' }));
+            }, MESSAGE_SEQUENCE_DELAY_MS);
           } catch (error) {
             console.error('Error calling MCP tool:', error);
             openAiWs.send(JSON.stringify({
