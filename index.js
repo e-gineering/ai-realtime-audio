@@ -436,20 +436,10 @@ async function callMCPTool(toolName, args, context = {}) {
 fastify.register(async (fastify) => {
   fastify.get('/media-stream', { websocket: true }, (connection, req) => {
     console.log('Client connected to /media-stream');
-    
-    // Extract phone number from query parameters
-    const phoneNumber = req.query?.phone || null;
-    console.log('📱 Caller phone number:', phoneNumber);
-    
-    // Check if this is a returning caller
-    let returningCaller = null;
 
-    if (phoneNumber) {
-      returningCaller = getCallerByPhoneNumber(phoneNumber);
-      if (returningCaller && returningCaller.caller_name) {
-        console.log(`👋 Returning caller detected: ${returningCaller.caller_name}`);
-      }
-    }
+    // Phone number will be extracted from Twilio's start event customParameters
+    let phoneNumber = null;
+    let returningCaller = null;
 
     const openAiWs = new WebSocket(OPENAI_WS_URL, {
       headers: {
@@ -494,41 +484,13 @@ fastify.register(async (fastify) => {
       console.log('Sending session update:', JSON.stringify(sessionUpdate));
       openAiWs.send(JSON.stringify(sessionUpdate));
 
-      // Send initial greeting to make AI speak first
-      setTimeout(() => {
-        let greetingText;
-        if (returningCaller && returningCaller.caller_name) {
-          greetingText = `This is a returning caller named ${returningCaller.caller_name}. Welcome them back warmly and invite them to begin a scaffolding inspection. DO NOT ask for their name - use ${returningCaller.caller_name} for the inspector_name field.`;
-        } else {
-          greetingText = 'This is a new caller. Please greet them and invite them to begin a scaffolding inspection. You will need to ask for their name.';
-        }
-        
-        const initialMessage = {
-          type: 'conversation.item.create',
-          item: {
-            type: 'message',
-            role: 'user',
-            content: [
-              {
-                type: 'input_text',
-                text: greetingText
-              }
-            ]
-          }
-        };
-        openAiWs.send(JSON.stringify(initialMessage));
-
-        // Trigger AI response after a small delay to ensure proper message sequencing
-        setTimeout(() => {
-          openAiWs.send(JSON.stringify({ type: 'response.create' }));
-        }, MESSAGE_SEQUENCE_DELAY_MS);
-      }, TOTAL_GREETING_DELAY_MS);
+      // Greeting will be sent after we receive the 'start' event and extract phone number
     };
 
     // Handle OpenAI WebSocket open
     openAiWs.on('open', () => {
       console.log('Connected to OpenAI Realtime API');
-      setTimeout(sendSessionUpdate, SESSION_UPDATE_DELAY_MS);
+      // Session update will be sent after receiving session.created event
     });
 
     // Handle messages from OpenAI
@@ -539,6 +501,11 @@ fastify.register(async (fastify) => {
         // Log all events for debugging
         if (response.type !== 'response.audio.delta') {
           console.log(`OpenAI Event: ${response.type}`, response);
+        }
+
+        // Send session update when session is created
+        if (response.type === 'session.created') {
+          await sendSessionUpdate();
         }
 
         // Handle function calls from OpenAI
@@ -667,9 +634,59 @@ fastify.register(async (fastify) => {
           case 'start':
             streamSid = data.start.streamSid;
             console.log('Incoming stream started:', streamSid);
-            
+
+            // Extract phone number from Twilio customParameters
+            if (data.start.customParameters?.phone) {
+              phoneNumber = data.start.customParameters.phone;
+              console.log('📱 Caller phone number:', phoneNumber);
+
+              // Check if this is a returning caller
+              returningCaller = getCallerByPhoneNumber(phoneNumber);
+              if (returningCaller && returningCaller.caller_name) {
+                console.log(`👋 Returning caller detected: ${returningCaller.caller_name}`);
+              }
+            }
+
             createInspection(streamSid, phoneNumber);
             console.log('📋 New inspection record created for stream:', streamSid);
+
+            // Send initial greeting based on caller status
+            // Wait for OpenAI WebSocket to be ready before sending greeting
+            const sendGreeting = () => {
+              if (openAiWs.readyState === WebSocket.OPEN) {
+                let greetingText;
+                if (returningCaller && returningCaller.caller_name) {
+                  greetingText = `This is a returning caller named ${returningCaller.caller_name}. Welcome them back warmly and invite them to begin a scaffolding inspection. DO NOT ask for their name - use ${returningCaller.caller_name} for the inspector_name field.`;
+                } else {
+                  greetingText = 'This is a new caller. Please greet them and invite them to begin a scaffolding inspection. You will need to ask for their name.';
+                }
+
+                const initialMessage = {
+                  type: 'conversation.item.create',
+                  item: {
+                    type: 'message',
+                    role: 'user',
+                    content: [
+                      {
+                        type: 'input_text',
+                        text: greetingText
+                      }
+                    ]
+                  }
+                };
+                openAiWs.send(JSON.stringify(initialMessage));
+
+                // Trigger AI response after a small delay to ensure proper message sequencing
+                setTimeout(() => {
+                  openAiWs.send(JSON.stringify({ type: 'response.create' }));
+                }, MESSAGE_SEQUENCE_DELAY_MS);
+              } else {
+                // If WebSocket not ready yet, wait and retry
+                setTimeout(sendGreeting, 100);
+              }
+            };
+
+            setTimeout(sendGreeting, GREETING_DELAY_OFFSET_MS);
             break;
           default:
             console.log('Received non-media event:', data.event);
@@ -717,19 +734,23 @@ fastify.post('/incoming-call', async (request, reply) => {
   if (callerPhoneNumber) {
     callerInfo = getCallerByPhoneNumber(callerPhoneNumber);
     if (callerInfo) {
-      console.log(`👋 Returning caller: ${callerInfo.caller_name || 'Name not set'} (${callerInfo.total_calls} total calls)`);
+      console.log(`👋 Returning caller: ${callerInfo.caller_name || 'Name not set'}`);
     } else {
       console.log('🆕 New caller');
     }
   }
   
-  // Encode caller info in the WebSocket URL as query parameters
-  const callerParam = callerPhoneNumber ? `?phone=${encodeURIComponent(callerPhoneNumber)}` : '';
-  
+  // Pass caller info via Twilio Stream parameters
+  const parameterXml = callerPhoneNumber
+    ? `<Parameter name="phone" value="${callerPhoneNumber}" />`
+    : '';
+
   const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
     <Response>
       <Connect>
-        <Stream url="wss://${request.headers.host}/media-stream${callerParam}" />
+        <Stream url="wss://${request.headers.host}/media-stream">
+          ${parameterXml}
+        </Stream>
       </Connect>
     </Response>`;
 
