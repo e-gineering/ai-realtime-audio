@@ -76,8 +76,7 @@ fastify.register(FastifyBasicAuth, {
     } else {
       done(new Error('Invalid credentials'));
     }
-  },
-  authenticate: true
+  }
 });
 
 const OPENAI_WS_URL = `wss://api.openai.com/v1/realtime?model=${OPENAI_MODEL}`;
@@ -796,66 +795,69 @@ fastify.get('/', async (request, reply) => {
   };
 });
 
-// API endpoint to get all inspections
-fastify.get('/inspections', { onRequest: fastify.basicAuth }, async (request, reply) => {
-  const limit = parseInt(request.query.limit) || 100;
-  const inspections = getAllInspections(limit);
-  return { inspections, count: inspections.length };
-});
+// Protected API endpoints - wrapped in after() so basicAuth decorator is available
+fastify.after(() => {
+  // API endpoint to get all inspections
+  fastify.get('/inspections', { onRequest: fastify.basicAuth }, async (request, reply) => {
+    const limit = parseInt(request.query.limit) || 100;
+    const inspections = getAllInspections(limit);
+    return { inspections, count: inspections.length };
+  });
 
-// API endpoint to get inspection by tag
-fastify.get('/inspections/equipment/:equipmentId', { onRequest: fastify.basicAuth }, async (request, reply) => {
-  const inspections = getInspectionByEquipmentId(request.params.equipmentId);
-  return { inspections, count: inspections.length };
-});
+  // API endpoint to get inspection by tag
+  fastify.get('/inspections/equipment/:equipmentId', { onRequest: fastify.basicAuth }, async (request, reply) => {
+    const inspections = getInspectionByEquipmentId(request.params.equipmentId);
+    return { inspections, count: inspections.length };
+  });
 
-// API endpoint to get inspections by result
-fastify.get('/inspections/result/:result', { onRequest: fastify.basicAuth }, async (request, reply) => {
-  const result = request.params.result.toUpperCase();
-  if (result !== 'PASS' && result !== 'FAIL') {
-    reply.code(400).send({ error: 'Result must be PASS or FAIL' });
-    return;
-  }
-  const limit = parseInt(request.query.limit) || 100;
-  const inspections = getInspectionsByResult(result, limit);
-  return { inspections, count: inspections.length, result };
-});
+  // API endpoint to get inspections by result
+  fastify.get('/inspections/result/:result', { onRequest: fastify.basicAuth }, async (request, reply) => {
+    const result = request.params.result.toUpperCase();
+    if (result !== 'PASS' && result !== 'FAIL') {
+      reply.code(400).send({ error: 'Result must be PASS or FAIL' });
+      return;
+    }
+    const limit = parseInt(request.query.limit) || 100;
+    const inspections = getInspectionsByResult(result, limit);
+    return { inspections, count: inspections.length, result };
+  });
 
-// API endpoint to search inspections by location
-fastify.get('/inspections/location/:location', { onRequest: fastify.basicAuth }, async (request, reply) => {
-  const limit = parseInt(request.query.limit) || 100;
-  const inspections = getInspectionsByLocation(request.params.location, limit);
-  return { inspections, count: inspections.length };
-});
+  // API endpoint to search inspections by location
+  fastify.get('/inspections/location/:location', { onRequest: fastify.basicAuth }, async (request, reply) => {
+    const limit = parseInt(request.query.limit) || 100;
+    const inspections = getInspectionsByLocation(request.params.location, limit);
+    return { inspections, count: inspections.length };
+  });
 
-// API endpoint to get statistics
-fastify.get('/inspections/stats', { onRequest: fastify.basicAuth }, async (request, reply) => {
-  const stats = getInspectionStats();
-  return { stats };
-});
+  // API endpoint to get statistics
+  fastify.get('/inspections/stats', { onRequest: fastify.basicAuth }, async (request, reply) => {
+    const stats = getInspectionStats();
+    return { stats };
+  });
 
-fastify.get('/equipment', { onRequest: fastify.basicAuth }, async (request, reply) => {
-  const equipment = getAllEquipment();
-  return { equipment, count: equipment.length };
-});
+  fastify.get('/equipment', { onRequest: fastify.basicAuth }, async (request, reply) => {
+    const equipment = getAllEquipment();
+    return { equipment, count: equipment.length };
+  });
 
-fastify.get('/equipment/:equipmentId', { onRequest: fastify.basicAuth }, async (request, reply) => {
-  const equipment = getEquipmentById(request.params.equipmentId);
-  if (!equipment) {
-    reply.code(404).send({ error: 'Equipment not found' });
-    return;
-  }
-  return { equipment };
-});
+  fastify.get('/equipment/:equipmentId', { onRequest: fastify.basicAuth }, async (request, reply) => {
+    const equipment = getEquipmentById(request.params.equipmentId);
+    if (!equipment) {
+      reply.code(404).send({ error: 'Equipment not found' });
+      return;
+    }
+    return { equipment };
+  });
 
-fastify.get('/equipment/location/:location', { onRequest: fastify.basicAuth }, async (request, reply) => {
-  const equipment = searchEquipmentByLocation(request.params.location);
-  return { equipment, count: equipment.length };
-});
+  fastify.get('/equipment/location/:location', { onRequest: fastify.basicAuth }, async (request, reply) => {
+    const equipment = searchEquipmentByLocation(request.params.location);
+    return { equipment, count: equipment.length };
+  });
 
-fastify.get('/equipment/stats', { onRequest: fastify.basicAuth }, async (request, reply) => {
-  const stats = getEquipmentStats();
-  return { stats };
+  fastify.get('/equipment/stats', { onRequest: fastify.basicAuth }, async (request, reply) => {
+    const stats = getEquipmentStats();
+    return { stats };
+  });
 });
 
 // Start the server
