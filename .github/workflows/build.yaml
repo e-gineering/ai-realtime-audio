@@ -1,0 +1,96 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+      - '*.*.*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.set_image_tag.outputs.image_tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set image tag
+        id: set_image_tag
+        run: |
+          SHORT_COMMIT_HASH=$(git rev-parse --short HEAD)
+          EPOCH_TIME=$(date +%s)
+          echo "IMAGE_TAG=$SHORT_COMMIT_HASH-$EPOCH_TIME" >> $GITHUB_ENV
+          echo "image_tag=$SHORT_COMMIT_HASH-$EPOCH_TIME" >> $GITHUB_OUTPUT
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Output image URL
+        run: |
+          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+
+  promote-image:
+    name: Promote Image
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install skopeo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+
+      - name: Authenticate skopeo with GHCR
+        env:
+          CR_PAT: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$CR_PAT" | skopeo login --username ${{ github.actor }} --password-stdin "$REGISTRY"
+
+      - name: Promote image to release tag
+        env:
+          SOURCE_TAG: ${{ needs.build.outputs.image_tag }}
+        run: |
+          if [ -z "$SOURCE_TAG" ]; then
+            echo "Source image tag not provided; ensure build job ran." >&2
+            exit 1
+          fi
+
+          TAG_NAME=${GITHUB_REF_NAME}
+          SOURCE_IMAGE="$REGISTRY/$IMAGE_NAME:$SOURCE_TAG"
+          DEST_IMAGE="$REGISTRY/$IMAGE_NAME:$TAG_NAME"
+
+          echo "Promoting $SOURCE_IMAGE to $DEST_IMAGE"
+          skopeo copy --all docker://"$SOURCE_IMAGE" docker://"$DEST_IMAGE"
