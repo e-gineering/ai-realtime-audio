@@ -37,8 +37,7 @@ export function initializeDatabase() {
       phone_number TEXT UNIQUE NOT NULL,
       caller_name TEXT,
       first_call_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      last_call_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      total_calls INTEGER DEFAULT 1
+      last_call_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     
     CREATE INDEX IF NOT EXISTS idx_stream_sid ON inspections(stream_sid);
@@ -176,33 +175,15 @@ export function saveCallerName(phoneNumber, callerName) {
   if (!phoneNumber || !callerName) return null;
 
   const stmt = db.prepare(`
-    INSERT INTO callers (phone_number, caller_name, first_call_at, last_call_at, total_calls)
-    VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+    INSERT INTO callers (phone_number, caller_name, first_call_at, last_call_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     ON CONFLICT(phone_number)
     DO UPDATE SET
       caller_name = excluded.caller_name,
       last_call_at = CURRENT_TIMESTAMP
-      -- INSERT: Initialize new caller with total_calls = 1 (they're on first call)
-      -- UPDATE: Only update name/timestamp, don't touch total_calls
-      -- Call count increments handled by updateCallerLastCall() per connection
   `);
 
   return stmt.run(phoneNumber, callerName);
-}
-
-export function updateCallerLastCall(phoneNumber) {
-  if (!phoneNumber) return null;
-  
-  const stmt = db.prepare(`
-    INSERT INTO callers (phone_number, first_call_at, last_call_at, total_calls)
-    VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
-    ON CONFLICT(phone_number) 
-    DO UPDATE SET 
-      last_call_at = CURRENT_TIMESTAMP,
-      total_calls = total_calls + 1
-  `);
-  
-  return stmt.run(phoneNumber);
 }
 
 export default {
@@ -219,6 +200,5 @@ export default {
   closeDatabase,
   getDatabase,
   getCallerByPhoneNumber,
-  saveCallerName,
-  updateCallerLastCall
+  saveCallerName
 };
