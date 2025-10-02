@@ -316,17 +316,12 @@ async function callMCPTool(toolName, args, context = {}) {
       const caller = getCallerByPhoneNumber(phoneNumber);
 
       if (!caller) {
-        // New caller: save name and increment call count
+        // New caller: save name (automatically sets total_calls to 1 on INSERT)
         saveCallerName(phoneNumber, args.caller_name.trim());
         console.log(`👤 Saved caller name: ${args.caller_name} for ${phoneNumber}`);
-
-        if (!callCounted) {
-          updateCallerLastCall(phoneNumber);
-          console.log(`📊 Incremented call count for new caller`);
-          context.callCounted = true;
-        }
+        context.callCounted = true;  // Mark as counted (INSERT set it to 1)
       } else {
-        // Existing caller: just update name
+        // Existing caller: just update name (no call count changes)
         saveCallerName(phoneNumber, args.caller_name.trim());
         console.log(`👤 Updated caller name: ${args.caller_name} for ${phoneNumber}`);
       }

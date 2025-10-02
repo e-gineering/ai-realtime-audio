@@ -177,7 +177,7 @@ export function saveCallerName(phoneNumber, callerName) {
 
   const stmt = db.prepare(`
     INSERT INTO callers (phone_number, caller_name, first_call_at, last_call_at, total_calls)
-    VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+    VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
     ON CONFLICT(phone_number)
     DO UPDATE SET
       caller_name = excluded.caller_name,
