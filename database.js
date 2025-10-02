@@ -182,8 +182,9 @@ export function saveCallerName(phoneNumber, callerName) {
     DO UPDATE SET
       caller_name = excluded.caller_name,
       last_call_at = CURRENT_TIMESTAMP
-      -- Only update name and timestamp, never increment call count
-      -- Call tracking is handled separately per WebSocket connection
+      -- INSERT: Initialize new caller with total_calls = 1 (they're on first call)
+      -- UPDATE: Only update name/timestamp, don't touch total_calls
+      -- Call count increments handled by updateCallerLastCall() per connection
   `);
 
   return stmt.run(phoneNumber, callerName);
