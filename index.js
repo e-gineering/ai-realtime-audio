@@ -312,7 +312,10 @@ async function callMCPTool(toolName, args, context = {}) {
     }
 
     try {
-      const wasNewCaller = !getCallerByPhoneNumber(phoneNumber);
+      // Check if caller exists before making any mutations
+      const caller = getCallerByPhoneNumber(phoneNumber);
+      const wasNewCaller = !caller;
+
       saveCallerName(phoneNumber, args.caller_name.trim());
       console.log(`👤 Saved caller name: ${args.caller_name} for ${phoneNumber}`);
 
