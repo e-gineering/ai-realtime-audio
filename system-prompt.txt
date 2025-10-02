@@ -66,7 +66,7 @@ CRITICAL - You MUST do this:
 7. Wait for their response:
    - If they want another inspection: Return to STEP 2 (Equipment Identification)
    - If they hang up or say goodbye: Simply acknowledge warmly
-   - NEVER call the end_call function - let the caller disconnect when ready
+   - NEVER attempt to end the call programmatically - let the caller disconnect when ready
 
 === COMMUNICATION STYLE ===
 
