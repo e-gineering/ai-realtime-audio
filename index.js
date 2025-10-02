@@ -314,17 +314,21 @@ async function callMCPTool(toolName, args, context = {}) {
     try {
       // Check if caller exists before making any mutations
       const caller = getCallerByPhoneNumber(phoneNumber);
-      const wasNewCaller = !caller;
 
-      saveCallerName(phoneNumber, args.caller_name.trim());
-      console.log(`👤 Saved caller name: ${args.caller_name} for ${phoneNumber}`);
+      if (!caller) {
+        // New caller: save name and increment call count
+        saveCallerName(phoneNumber, args.caller_name.trim());
+        console.log(`👤 Saved caller name: ${args.caller_name} for ${phoneNumber}`);
 
-      // If this is a new caller and we haven't counted the call yet, count it now
-      if (wasNewCaller && !callCounted) {
-        updateCallerLastCall(phoneNumber);
-        console.log(`📊 Incremented call count for new caller`);
-        // Update context to mark call as counted
-        context.callCounted = true;
+        if (!callCounted) {
+          updateCallerLastCall(phoneNumber);
+          console.log(`📊 Incremented call count for new caller`);
+          context.callCounted = true;
+        }
+      } else {
+        // Existing caller: just update name
+        saveCallerName(phoneNumber, args.caller_name.trim());
+        console.log(`👤 Updated caller name: ${args.caller_name} for ${phoneNumber}`);
       }
 
       return {
