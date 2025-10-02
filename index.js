@@ -516,7 +516,7 @@ fastify.register(async (fastify) => {
               }
             }));
 
-            // Request a new response after any function call
+            // After sending function call output to OpenAI, request a new response to continue the conversation
             setTimeout(() => {
               openAiWs.send(JSON.stringify({ type: 'response.create' }));
             }, MESSAGE_SEQUENCE_DELAY_MS);
