@@ -870,8 +870,6 @@ async function start() {
     await fastify.listen({ port: PORT, host: '0.0.0.0' });
 
     fastify.log.info(`Server is listening on port ${PORT}`);
-    fastify.log.info('Twilio webhook URL: http://your-domain/incoming-call');
-    fastify.log.info('WebSocket endpoint: ws://your-domain/media-stream');
     fastify.log.info('API endpoints available:');
     fastify.log.info('  GET  /inspections - List all inspections');
     fastify.log.info('  GET  /inspections/equipment/:equipmentId - Get inspections by equipment ID');
