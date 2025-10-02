@@ -220,7 +220,8 @@ Returns:
 7. AI asks: "Does the scaffolding pass or fail?"
 8. AI asks: "Any concerns to note?"
 9. AI submits structured JSON data to database
-10. AI thanks user and ends call
+10. AI: "You may now hang up, or let me know if you'd like to enter another inspection"
+11. User can either hang up or record additional inspections (loops back to step 3)
 
 ### Testing Without Twilio
 
