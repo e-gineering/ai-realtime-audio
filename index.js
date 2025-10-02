@@ -39,10 +39,11 @@ const {
 } = process.env;
 
 let SYSTEM_MESSAGE = 'You are a helpful AI assistant.';
+const systemPromptPath = SYSTEM_MESSAGE_FILE;
 try {
-  SYSTEM_MESSAGE = readFileSync(SYSTEM_MESSAGE_FILE, 'utf-8').trim();
+  SYSTEM_MESSAGE = readFileSync(systemPromptPath, 'utf-8').trim();
 } catch (error) {
-  console.warn(`Could not read system prompt from ${SYSTEM_MESSAGE_FILE}, using default`);
+  // Will log after fastify is initialized
 }
 
 if (!OPENAI_API_KEY) {
@@ -50,7 +51,20 @@ if (!OPENAI_API_KEY) {
   process.exit(1);
 }
 
-const fastify = Fastify();
+const fastify = Fastify({
+  logger: {
+    level: process.env.LOG_LEVEL || 'info',
+    transport: process.env.NODE_ENV !== 'production' ? {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'HH:MM:ss',
+        ignore: 'pid,hostname'
+      }
+    } : undefined
+  }
+});
+
 fastify.register(FastifyWS);
 fastify.register(import('@fastify/formbody'));
 
@@ -84,7 +98,7 @@ const TOTAL_GREETING_DELAY_MS = SESSION_UPDATE_DELAY_MS + GREETING_DELAY_OFFSET_
 const mcpClients = new Map();
 
 // Initialize MCP servers
-async function initializeMCP() {
+async function initializeMCP(logger) {
   const mcpServers = process.env.MCP_SERVERS?.split(',').filter(Boolean) || [];
 
   for (const serverName of mcpServers) {
@@ -92,7 +106,7 @@ async function initializeMCP() {
     const command = process.env[commandEnvVar];
 
     if (!command) {
-      console.warn(`No command found for MCP server: ${serverName} (expected ${commandEnvVar})`);
+      logger.warn(`No command found for MCP server: ${serverName} (expected ${commandEnvVar})`);
       continue;
     }
 
@@ -141,9 +155,9 @@ async function initializeMCP() {
 
       await client.connect(transport);
       mcpClients.set(serverName, client);
-      console.log(`✓ MCP server '${serverName}' initialized`);
+      logger.info(`MCP server '${serverName}' initialized`);
     } catch (error) {
-      console.error(`Failed to initialize MCP server '${serverName}':`, error.message);
+      logger.error(`Failed to initialize MCP server '${serverName}': ${error.message}`);
     }
   }
 }
@@ -164,7 +178,7 @@ async function getMCPTools() {
         });
       }
     } catch (error) {
-      console.error(`Error listing tools from ${serverName}:`, error.message);
+      fastify.log.error(`Error listing tools from ${serverName}: ${error.message}`);
     }
   }
 
@@ -324,7 +338,7 @@ async function callMCPTool(toolName, args, context = {}) {
 
     try {
       saveCallerName(phoneNumber, args.caller_name.trim());
-      console.log(`👤 Saved caller name: ${args.caller_name} for ${phoneNumber}`);
+      fastify.log.info({ callerName: args.caller_name, phoneNumber }, 'Saved caller name');
 
       return {
         success: true,
@@ -332,7 +346,7 @@ async function callMCPTool(toolName, args, context = {}) {
         caller_name: args.caller_name.trim()
       };
     } catch (error) {
-      console.error('❌ Error saving caller name:', error);
+      fastify.log.error({ error }, 'Error saving caller name');
       return {
         success: false,
         error: 'Database error',
@@ -391,19 +405,18 @@ async function callMCPTool(toolName, args, context = {}) {
     
     try {
       saveInspectionData(context.streamSid, args);
-      console.log('📋 Inspection Data Submitted:', JSON.stringify(args, null, 2));
-      console.log('💾 Saved to database for stream:', context.streamSid);
-      
+      fastify.log.info({ inspectionData: args, streamSid: context.streamSid }, 'Inspection data submitted and saved');
+
       context.inspectionSubmitted = true;
       context.inspectionData = args;
-      
+
       return {
         success: true,
         message: 'Inspection data successfully recorded',
         data: args
       };
     } catch (error) {
-      console.error('❌ Database save error:', error);
+      fastify.log.error({ error, streamSid: context.streamSid }, 'Database save error');
       return {
         success: false,
         error: 'Database error',
@@ -447,7 +460,7 @@ async function callMCPTool(toolName, args, context = {}) {
 // Main WebSocket route for handling Twilio media streams
 fastify.register(async (fastify) => {
   fastify.get('/media-stream', { websocket: true }, (connection, req) => {
-    console.log('Client connected to /media-stream');
+    fastify.log.info('Client connected to /media-stream');
 
     // Phone number will be extracted from Twilio's start event customParameters
     let phoneNumber = null;
@@ -490,10 +503,10 @@ fastify.register(async (fastify) => {
       if (tools.length > 0) {
         sessionUpdate.session.tools = tools;
         sessionUpdate.session.tool_choice = 'auto';
-        console.log(`Configured ${tools.length} MCP tools`);
+        fastify.log.debug({ toolCount: tools.length }, 'Configured MCP tools');
       }
 
-      console.log('Sending session update:', JSON.stringify(sessionUpdate));
+      fastify.log.debug('Sending session update');
       openAiWs.send(JSON.stringify(sessionUpdate));
 
       // Greeting will be sent after we receive the 'start' event and extract phone number
@@ -501,7 +514,7 @@ fastify.register(async (fastify) => {
 
     // Handle OpenAI WebSocket open
     openAiWs.on('open', () => {
-      console.log('Connected to OpenAI Realtime API');
+      fastify.log.info('Connected to OpenAI Realtime API');
       // Session update will be sent after receiving session.created event
     });
 
@@ -512,7 +525,7 @@ fastify.register(async (fastify) => {
 
         // Log all events for debugging
         if (response.type !== 'response.audio.delta') {
-          console.log(`OpenAI Event: ${response.type}`, response);
+          fastify.log.debug({ event: response.type, data: response }, 'OpenAI event');
         }
 
         // Send session update when session is created
@@ -523,7 +536,7 @@ fastify.register(async (fastify) => {
         // Handle function calls from OpenAI
         if (response.type === 'response.function_call_arguments.done') {
           const { call_id, name, arguments: args } = response;
-          console.log(`Function call: ${name}`, args);
+          fastify.log.info({ functionName: name, args }, 'Function call');
 
           try {
             let parsedArgs;
@@ -545,7 +558,7 @@ fastify.register(async (fastify) => {
             if (name === 'submit_inspection_data' && result.success) {
               inspectionSubmitted = true;
               inspectionData = parsedArgs;
-              console.log('✅ Inspection data validated and stored');
+              fastify.log.info('Inspection data validated and stored');
             }
 
             // Send function result back to OpenAI
@@ -560,7 +573,7 @@ fastify.register(async (fastify) => {
 
             // Handle end_call function
             if (name === 'end_call' && result.success) {
-              console.log(`📞 Call ending requested: ${parsedArgs.reason}`);
+              fastify.log.info({ reason: parsedArgs.reason }, 'Call ending requested');
 
               // Send a final message asking AI to say goodbye
               setTimeout(() => {
@@ -576,7 +589,7 @@ fastify.register(async (fastify) => {
                   };
                   connection.send(JSON.stringify(hangupMessage));
                   connection.close();
-                  console.log('📞 Call ended');
+                  fastify.log.info('Call ended');
                 }
               }, 3000);
             } else {
@@ -586,7 +599,7 @@ fastify.register(async (fastify) => {
               }, MESSAGE_SEQUENCE_DELAY_MS);
             }
           } catch (error) {
-            console.error('Error calling MCP tool:', error);
+            fastify.log.error({ error, functionName: name }, 'Error calling MCP tool');
             openAiWs.send(JSON.stringify({
               type: 'conversation.item.create',
               item: {
@@ -616,7 +629,7 @@ fastify.register(async (fastify) => {
           connection.send(JSON.stringify(audioDelta));
         }
       } catch (error) {
-        console.error('Error processing OpenAI message:', error);
+        fastify.log.error({ error }, 'Error processing OpenAI message');
       }
     });
 
@@ -645,22 +658,22 @@ fastify.register(async (fastify) => {
             break;
           case 'start':
             streamSid = data.start.streamSid;
-            console.log('Incoming stream started:', streamSid);
+            fastify.log.info({ streamSid }, 'Incoming stream started');
 
             // Extract phone number from Twilio customParameters
             if (data.start.customParameters?.phone) {
               phoneNumber = data.start.customParameters.phone;
-              console.log('📱 Caller phone number:', phoneNumber);
+              fastify.log.info({ phoneNumber }, 'Caller phone number');
 
               // Check if this is a returning caller
               returningCaller = getCallerByPhoneNumber(phoneNumber);
               if (returningCaller && returningCaller.caller_name) {
-                console.log(`👋 Returning caller detected: ${returningCaller.caller_name}`);
+                fastify.log.info({ callerName: returningCaller.caller_name }, 'Returning caller detected');
               }
             }
 
             createInspection(streamSid, phoneNumber);
-            console.log('📋 New inspection record created for stream:', streamSid);
+            fastify.log.info({ streamSid }, 'New inspection record created');
 
             // Send initial greeting based on caller status
             // Wait for OpenAI WebSocket to be ready before sending greeting
@@ -701,11 +714,11 @@ fastify.register(async (fastify) => {
             setTimeout(sendGreeting, GREETING_DELAY_OFFSET_MS);
             break;
           default:
-            console.log('Received non-media event:', data.event);
+            fastify.log.debug({ event: data.event }, 'Received non-media event');
             break;
         }
       } catch (error) {
-        console.error('Error parsing Twilio message:', error);
+        fastify.log.error({ error }, 'Error parsing Twilio message');
       }
     });
 
@@ -714,23 +727,23 @@ fastify.register(async (fastify) => {
       if (openAiWs.readyState === WebSocket.OPEN) {
         openAiWs.close();
       }
-      
+
       if (streamSid) {
         completeInspection(streamSid);
-        console.log('✅ Inspection call completed:', streamSid);
+        fastify.log.info({ streamSid }, 'Inspection call completed');
       }
-      
-      console.log('Client disconnected');
+
+      fastify.log.info('Client disconnected');
     });
 
     // Handle OpenAI WebSocket close
     openAiWs.on('close', () => {
-      console.log('Disconnected from OpenAI Realtime API');
+      fastify.log.info('Disconnected from OpenAI Realtime API');
     });
 
     // Handle errors
     openAiWs.on('error', (error) => {
-      console.error('OpenAI WebSocket error:', error);
+      fastify.log.error({ error }, 'OpenAI WebSocket error');
     });
   });
 });
@@ -739,16 +752,16 @@ fastify.register(async (fastify) => {
 fastify.post('/incoming-call', async (request, reply) => {
   // Twilio sends the caller's phone number in the 'From' parameter
   const callerPhoneNumber = request.body.From || null;
-  console.log('📞 Incoming call from:', callerPhoneNumber);
-  
+  fastify.log.info({ callerPhoneNumber }, 'Incoming call');
+
   // Check if this is a returning caller
   let callerInfo = null;
   if (callerPhoneNumber) {
     callerInfo = getCallerByPhoneNumber(callerPhoneNumber);
     if (callerInfo) {
-      console.log(`👋 Returning caller: ${callerInfo.caller_name || 'Name not set'}`);
+      fastify.log.info({ callerName: callerInfo.caller_name || 'Name not set' }, 'Returning caller');
     } else {
-      console.log('🆕 New caller');
+      fastify.log.info('New caller');
     }
   }
   
@@ -850,45 +863,46 @@ async function start() {
   try {
     // Initialize database first
     initializeDatabase();
-    
+
     // Initialize MCP servers
-    await initializeMCP();
+    await initializeMCP(fastify.log);
 
     await fastify.listen({ port: PORT, host: '0.0.0.0' });
-    console.log(`\n🚀 Server is listening on port ${PORT}`);
-    console.log(`📞 Twilio webhook URL: http://your-domain/incoming-call`);
-    console.log(`🔌 WebSocket endpoint: ws://your-domain/media-stream`);
-    console.log(`📊 API endpoints:`);
-    console.log(`   GET  /inspections - List all inspections`);
-    console.log(`   GET  /inspections/equipment/:equipmentId - Get inspections by equipment ID`);
-    console.log(`   GET  /inspections/result/:result - Filter by PASS/FAIL`);
-    console.log(`   GET  /inspections/location/:location - Search by location`);
-    console.log(`   GET  /inspections/stats - Get statistics`);
-    console.log(`   GET  /equipment - List all equipment`);
-    console.log(`   GET  /equipment/:equipmentId - Get equipment by ID`);
-    console.log(`   GET  /equipment/location/:location - Search equipment by location`);
-    console.log(`   GET  /equipment/stats - Get equipment statistics`);
+
+    fastify.log.info(`Server is listening on port ${PORT}`);
+    fastify.log.info('Twilio webhook URL: http://your-domain/incoming-call');
+    fastify.log.info('WebSocket endpoint: ws://your-domain/media-stream');
+    fastify.log.info('API endpoints available:');
+    fastify.log.info('  GET  /inspections - List all inspections');
+    fastify.log.info('  GET  /inspections/equipment/:equipmentId - Get inspections by equipment ID');
+    fastify.log.info('  GET  /inspections/result/:result - Filter by PASS/FAIL');
+    fastify.log.info('  GET  /inspections/location/:location - Search by location');
+    fastify.log.info('  GET  /inspections/stats - Get statistics');
+    fastify.log.info('  GET  /equipment - List all equipment');
+    fastify.log.info('  GET  /equipment/:equipmentId - Get equipment by ID');
+    fastify.log.info('  GET  /equipment/location/:location - Search equipment by location');
+    fastify.log.info('  GET  /equipment/stats - Get equipment statistics');
 
     if (mcpClients.size > 0) {
-      console.log(`🔧 MCP servers active: ${Array.from(mcpClients.keys()).join(', ')}`);
+      fastify.log.info({ servers: Array.from(mcpClients.keys()) }, 'MCP servers active');
     } else {
-      console.log('ℹ️  No MCP servers configured (add MCP_SERVERS to .env)');
+      fastify.log.info('No MCP servers configured (add MCP_SERVERS to .env)');
     }
   } catch (err) {
-    console.error('Error starting server:', err);
+    fastify.log.error({ error: err }, 'Error starting server');
     process.exit(1);
   }
 }
 
 // Cleanup on exit
 process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down...');
+  fastify.log.info('Shutting down...');
   closeDatabase();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
-  console.log('\n🛑 Shutting down...');
+  fastify.log.info('Shutting down...');
   closeDatabase();
   process.exit(0);
 });
