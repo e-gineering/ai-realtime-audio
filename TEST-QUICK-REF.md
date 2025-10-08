@@ -3,11 +3,11 @@
 ## Running Tests
 
 ```bash
-# Run all tests (109 tests)
+# Run all tests (112 tests)
 npm test
 
 # Run specific test suites
-npm run test:database      # 31 tests - Database operations
+npm run test:database      # 34 tests - Database operations + safety
 npm run test:equipment     # 36 tests - Equipment management  
 npm run test:validation    # 29 tests - Input validation
 npm run test:integration   # 13 tests - End-to-end workflows
@@ -20,11 +20,11 @@ npm run test:watch
 
 | Test Suite | Tests | Lines | Coverage |
 |------------|-------|-------|----------|
-| Database   | 31    | 385   | CRUD operations, filtering, stats, caller management |
+| Database   | 34    | 425   | CRUD operations, filtering, stats, caller management, safety checks |
 | Equipment  | 36    | 301   | Registry, search, filtering, data integrity |
 | Validation | 29    | 358   | Field validation, edge cases, error handling |
 | Integration| 13    | 341   | End-to-end workflows, multi-module interactions |
-| **Total**  | **109** | **1,385** | **All core functionality** |
+| **Total**  | **112** | **1,425** | **All core functionality** |
 
 ## Test Execution Time
 
@@ -150,7 +150,7 @@ test/
     ✔ should handle multiple inspections and aggregate stats
     ... (11 more)
 
-  109 passing (334ms)
+  112 passing (334ms)
 ```
 
 ## Troubleshooting

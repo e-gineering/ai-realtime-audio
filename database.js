@@ -189,6 +189,16 @@ export function saveCallerName(phoneNumber, callerName) {
 export function clearAllData() {
   if (!db) return;
   
+  // Safety check: only allow in test environment
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('clearAllData() cannot be called in production environment');
+  }
+  
+  // Additional safety: check if database path indicates test database
+  if (!process.env.DB_PATH?.includes('test')) {
+    console.warn('⚠️  Warning: clearAllData() called on non-test database path');
+  }
+  
   db.prepare('DELETE FROM inspections').run();
   db.prepare('DELETE FROM callers').run();
 }

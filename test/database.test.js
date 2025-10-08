@@ -421,4 +421,41 @@ describe('Database Module', function() {
       });
     });
   });
+
+  describe('Database Safety Features', function() {
+    describe('clearAllData()', function() {
+      it('should throw error when NODE_ENV is production', function() {
+        const originalEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'production';
+        
+        expect(() => clearAllData()).to.throw('clearAllData() cannot be called in production environment');
+        
+        process.env.NODE_ENV = originalEnv;
+      });
+
+      it('should work in test environment', function() {
+        // This test itself demonstrates that clearAllData works in test mode
+        createInspection('safety-test');
+        expect(getAllInspections()).to.have.lengthOf(1);
+        
+        clearAllData();
+        
+        expect(getAllInspections()).to.have.lengthOf(0);
+      });
+
+      it('should warn when called on non-test database path', function() {
+        const originalPath = process.env.DB_PATH;
+        const originalEnv = process.env.NODE_ENV;
+        
+        process.env.DB_PATH = './data/production.db';
+        process.env.NODE_ENV = 'development';
+        
+        // Should work but with warning (we can't easily test console.warn)
+        expect(() => clearAllData()).to.not.throw();
+        
+        process.env.DB_PATH = originalPath;
+        process.env.NODE_ENV = originalEnv;
+      });
+    });
+  });
 });
