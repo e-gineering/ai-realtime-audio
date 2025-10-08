@@ -99,8 +99,6 @@ Database will be persisted in `./data/inspections.db`
    ```bash
    npm test
    ```
-   
-   See [TESTING.md](TESTING.md) for comprehensive testing documentation.
 
 ## Configuration
 
@@ -260,8 +258,6 @@ npm run test:watch
 - ✅ All core modules covered
 - ✅ Edge cases and error handling
 - ✅ Fast execution (<1 second)
-
-See [TESTING.md](TESTING.md) for detailed testing documentation.
 
 ### Project Structure
 
