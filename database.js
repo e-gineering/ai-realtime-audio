@@ -186,6 +186,13 @@ export function saveCallerName(phoneNumber, callerName) {
   return stmt.run(phoneNumber, callerName);
 }
 
+export function clearAllData() {
+  if (!db) return;
+  
+  db.prepare('DELETE FROM inspections').run();
+  db.prepare('DELETE FROM callers').run();
+}
+
 export default {
   initializeDatabase,
   createInspection,
@@ -200,5 +207,6 @@ export default {
   closeDatabase,
   getDatabase,
   getCallerByPhoneNumber,
-  saveCallerName
+  saveCallerName,
+  clearAllData
 };

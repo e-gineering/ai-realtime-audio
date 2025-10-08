@@ -1,0 +1,10 @@
+{
+  "spec": "test/**/*.test.js",
+  "timeout": 10000,
+  "ui": "bdd",
+  "color": true,
+  "reporter": "spec",
+  "bail": false,
+  "exit": true,
+  "recursive": true
+}
