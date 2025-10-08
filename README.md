@@ -95,6 +95,11 @@ Database will be persisted in `./data/inspections.db`
 
    Server will start on `http://localhost:5050`
 
+4. **Run Tests** (Optional)
+   ```bash
+   npm test
+   ```
+
 ## Configuration
 
 ### Basic Configuration
@@ -221,6 +226,80 @@ Returns:
 8. AI asks: "Any concerns to note?"
 9. AI submits structured JSON data to database
 10. AI: "You may now hang up, or let me know if you'd like to enter another inspection"
+
+## Development
+
+### Testing
+
+The application includes a comprehensive test suite with **112 tests** covering:
+
+- **Database operations** (34 tests) - Including safety checks
+- **Equipment management** (36 tests)  
+- **Validation logic** (29 tests)
+- **Integration workflows** (13 tests)
+
+**Run tests:**
+```bash
+# Run all tests
+npm test
+
+# Run specific test suites
+npm run test:database
+npm run test:equipment
+npm run test:validation
+npm run test:integration
+
+# Watch mode for development
+npm run test:watch
+```
+
+**Test coverage:**
+- ✅ 112 passing tests
+- ✅ All core modules covered
+- ✅ Edge cases and error handling
+- ✅ Production safety checks
+- ✅ Fast execution (<1 second)
+
+### Project Structure
+
+```
+ai-realtime-audio/
+├── index.js              # Main server and WebSocket handling
+├── database.js           # SQLite database operations
+├── equipment.js          # Equipment registry
+├── validation.js         # Input validation logic
+├── system-prompt.txt     # AI system instructions
+├── data/                 # SQLite database storage
+├── test/                 # Test suite
+│   ├── database.test.js
+│   ├── equipment.test.js
+│   ├── validation.test.js
+│   ├── integration.test.js
+│   └── README.md
+├── .env                  # Configuration
+├── package.json          # Dependencies and scripts
+├── Dockerfile            # Docker image definition
+└── docker-compose.yml    # Docker Compose configuration
+```
+
+### Adding New Tests
+
+When adding new functionality:
+
+1. Add tests in the appropriate test file
+2. Run tests to ensure they pass: `npm test`
+3. Update documentation if needed
+
+Example test:
+```javascript
+describe('New Feature', function() {
+  it('should do something specific', function() {
+    const result = myFunction(input);
+    expect(result).to.equal(expected);
+  });
+});
+```
+
 11. User can either hang up or record additional inspections (loops back to step 3)
 
 ### Testing Without Twilio

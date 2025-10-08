@@ -6,7 +6,13 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "test": "cross-env NODE_ENV=test node ./node_modules/mocha/bin/mocha.js test/**/*.test.js --timeout 10000 --exit",
+    "test:watch": "cross-env NODE_ENV=test node ./node_modules/mocha/bin/mocha.js test/**/*.test.js --timeout 10000 --watch",
+    "test:database": "cross-env NODE_ENV=test node ./node_modules/mocha/bin/mocha.js test/database.test.js --timeout 10000 --exit",
+    "test:equipment": "cross-env NODE_ENV=test node ./node_modules/mocha/bin/mocha.js test/equipment.test.js --timeout 10000 --exit",
+    "test:validation": "cross-env NODE_ENV=test node ./node_modules/mocha/bin/mocha.js test/validation.test.js --timeout 10000 --exit",
+    "test:integration": "cross-env NODE_ENV=test node ./node_modules/mocha/bin/mocha.js test/integration.test.js --timeout 10000 --exit"
   },
   "repository": {
     "type": "git",
@@ -33,5 +39,13 @@
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@sinonjs/fake-timers": "^15.0.0",
+    "chai": "^6.2.0",
+    "cross-env": "^10.1.0",
+    "mocha": "^10.7.3",
+    "sinon": "^21.0.0",
+    "supertest": "^7.1.4"
   }
 }
