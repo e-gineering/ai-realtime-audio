@@ -13,6 +13,7 @@ A real-time voice AI assistant for conducting scaffolding safety inspections by 
 - **Docker Support**: Easy deployment with Docker Compose
 - **MCP Tool Support**: Extensible tool system for additional capabilities
 - **Interrupt Capable**: Users can interrupt the AI mid-response
+- **Comprehensive Testing**: 112 tests covering all core functionality
 
 ## Prerequisites
 
@@ -95,7 +96,7 @@ Database will be persisted in `./data/inspections.db`
 
    Server will start on `http://localhost:5050`
 
-4. **Run Tests** (Optional)
+4. **Run Tests**
    ```bash
    npm test
    ```
@@ -105,9 +106,12 @@ Database will be persisted in `./data/inspections.db`
 ### Basic Configuration
 
 - `OPENAI_API_KEY`: Your OpenAI API key (required)
+- `OPENAI_MODEL`: Model to use (default: gpt-realtime-2025-08-28)
 - `PORT`: Server port (default: 5050)
 - `VOICE`: Voice selection - alloy, echo, or shimmer (default: alloy)
 - `SYSTEM_MESSAGE`: Customize the AI assistant's personality
+- `LOG_CONVERSATIONS`: Enable conversation logging (default: true)
+- `DB_PATH`: Database path (default: ./conversations.db)
 
 ### Twilio Configuration (Optional)
 
@@ -158,7 +162,36 @@ The server supports MCP (Model Context Protocol) for extending the AI with tools
 
 See `mcp-config.example.json` for more examples.
 
-## Inspection Data API
+## Usage
+
+### Inspection Call Flow
+
+1. User calls Twilio number
+2. System recognizes returning callers and greets them by name (e.g., "Welcome back, John!")
+3. AI asks: "What's your inspection tag number?" (or equipment location)
+4. User provides tag (e.g., "SCAFF-001")
+5. AI collects: inspector name, location
+6. System saves caller's name for future calls
+7. AI asks: "Does the scaffolding pass or fail?"
+8. AI asks: "Any concerns to note?"
+9. AI submits structured JSON data to database
+10. AI confirms: "You may now hang up, or let me know if you'd like to enter another inspection"
+11. User can either hang up or record additional inspections (loops back to step 3)
+
+### Testing Without Twilio
+
+You can test the WebSocket connection directly:
+
+```bash
+# Connect to the WebSocket endpoint
+wscat -c ws://localhost:5050/media-stream
+```
+
+### With Twilio
+
+Call your Twilio phone number and start talking to the AI assistant!
+
+## REST API
 
 The application provides REST API endpoints to query inspection data:
 
@@ -202,39 +235,74 @@ Returns:
 }
 ```
 
+### API Endpoints Summary
+
+- `GET /`: Health check and status
+- `POST /incoming-call`: Twilio webhook for incoming calls (returns TwiML)
+- `WS /media-stream`: WebSocket endpoint for audio streaming
+- `GET /inspections`: Get all inspections
+- `GET /inspections/tag/:tag`: Get inspection by tag
+- `GET /inspections/result/:result`: Filter by PASS/FAIL
+- `GET /inspections/location/:location`: Search by location
+- `GET /inspections/stats`: Get statistics
+
 ## Database
 
 - **Storage**: SQLite database at `./data/inspections.db`
-- **Schema**: 
+- **Schema**:
   - **Inspections table**: Equipment ID, inspector name, location, pass/fail result, comments, phone number, timestamps
   - **Callers table**: Phone number, caller name, first/last call timestamps, total calls
 - **Caller Recognition**: Phone numbers are automatically associated with names for personalized greetings
 - **Persistence**: Database persisted in Docker volume
 - **Backup**: Simply copy the `data/` directory
 
-## Usage
+## Architecture
 
-### Inspection Call Flow
+```
+Phone Call → Twilio → WebSocket (media-stream) → Server → OpenAI Realtime API
+                                                     ↓
+                                                MCP Servers (tools)
+                                                     ↓
+                                              SQLite Database
+```
 
-1. User calls Twilio number
-2. System recognizes returning callers and greets them by name (e.g., "Welcome back, John!")
-3. AI: "What's your inspection tag number?" (or equipment location)
-4. User provides tag (e.g., "SCAFF-001")
-5. AI collects: name, location
-6. System saves caller's name for future calls
-7. AI asks: "Does the scaffolding pass or fail?"
-8. AI asks: "Any concerns to note?"
-9. AI submits structured JSON data to database
-10. AI: "You may now hang up, or let me know if you'd like to enter another inspection"
+The server:
+1. Receives audio from Twilio via WebSocket
+2. Forwards audio to OpenAI Realtime API
+3. Handles tool calls via MCP servers
+4. Stores inspection data in SQLite database
+5. Streams AI responses back to Twilio
 
 ## Development
+
+### Project Structure
+
+```
+ai-realtime-audio/
+├── index.js              # Main server and WebSocket handling
+├── database.js           # SQLite database operations
+├── equipment.js          # Equipment registry
+├── validation.js         # Input validation logic
+├── system-prompt.txt     # AI system instructions
+├── data/                 # SQLite database storage
+├── test/                 # Test suite
+│   ├── database.test.js
+│   ├── equipment.test.js
+│   ├── validation.test.js
+│   ├── integration.test.js
+│   └── README.md
+├── .env                  # Configuration
+├── package.json          # Dependencies and scripts
+├── Dockerfile            # Docker image definition
+└── docker-compose.yml    # Docker Compose configuration
+```
 
 ### Testing
 
 The application includes a comprehensive test suite with **112 tests** covering:
 
 - **Database operations** (34 tests) - Including safety checks
-- **Equipment management** (36 tests)  
+- **Equipment management** (36 tests)
 - **Validation logic** (29 tests)
 - **Integration workflows** (13 tests)
 
@@ -260,28 +328,6 @@ npm run test:watch
 - ✅ Production safety checks
 - ✅ Fast execution (<1 second)
 
-### Project Structure
-
-```
-ai-realtime-audio/
-├── index.js              # Main server and WebSocket handling
-├── database.js           # SQLite database operations
-├── equipment.js          # Equipment registry
-├── validation.js         # Input validation logic
-├── system-prompt.txt     # AI system instructions
-├── data/                 # SQLite database storage
-├── test/                 # Test suite
-│   ├── database.test.js
-│   ├── equipment.test.js
-│   ├── validation.test.js
-│   ├── integration.test.js
-│   └── README.md
-├── .env                  # Configuration
-├── package.json          # Dependencies and scripts
-├── Dockerfile            # Docker image definition
-└── docker-compose.yml    # Docker Compose configuration
-```
-
 ### Adding New Tests
 
 When adding new functionality:
@@ -300,42 +346,7 @@ describe('New Feature', function() {
 });
 ```
 
-11. User can either hang up or record additional inspections (loops back to step 3)
-
-### Testing Without Twilio
-
-You can test the WebSocket connection directly:
-
-```bash
-# Connect to the WebSocket endpoint
-wscat -c ws://localhost:5050/media-stream
-```
-
-### With Twilio
-
-Call your Twilio phone number and start talking to the AI assistant!
-
-## Architecture
-
-```
-Phone Call → Twilio → WebSocket (media-stream) → Server → OpenAI Realtime API
-                                                      ↓
-                                                 MCP Servers (tools)
-```
-
-The server:
-1. Receives audio from Twilio via WebSocket
-2. Forwards audio to OpenAI Realtime API
-3. Handles tool calls via MCP servers
-4. Streams AI responses back to Twilio
-
-## API Endpoints
-
-- `GET /`: Health check and status
-- `POST /incoming-call`: Twilio webhook for incoming calls (returns TwiML)
-- `WS /media-stream`: WebSocket endpoint for audio streaming
-
-## Development
+### Development Workflow
 
 ```bash
 # Run with auto-reload
@@ -359,6 +370,11 @@ npm run dev
 - Verify webhook URL is publicly accessible
 - Check that WebSocket URL in TwiML matches your server
 - Ensure OpenAI API key has Realtime API access
+
+**Database issues**
+- Ensure `./data` directory exists and has write permissions
+- Check database file path in configuration
+- Review database logs for specific errors
 
 ## Resources
 
